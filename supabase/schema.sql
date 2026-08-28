@@ -100,7 +100,10 @@ returns trigger
 language plpgsql
 security definer set search_path = ''
 as $$
+declare
+  v_pub_channel record;
 begin
+  -- 1. Create Profile row for the new user in public.profiles
   insert into public.profiles (id, display_name, email)
   values (
     new.id,
@@ -108,6 +111,16 @@ begin
     coalesce(new.email, '')
   )
   on conflict (id) do nothing;
+
+  -- 2. Automatically join the new user to all existing public channels
+  for v_pub_channel in
+    select id from public.channels where type = 'public' and archived_at is null
+  loop
+    insert into public.channel_members (channel_id, user_id, role, last_read_at, notification_pref)
+    values (v_pub_channel.id, new.id, 'member', now(), 'all')
+    on conflict (channel_id, user_id) do nothing;
+  end loop;
+
   return new;
 end;
 $$;

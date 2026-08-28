@@ -200,11 +200,18 @@ export default function LoginPage() {
             type="button"
             onClick={handleMagicLink}
             disabled={magicLoading}
-            className="w-full h-[44px] border border-[#DDDDDD] rounded-md text-[14px] font-medium text-[#000000] hover:bg-[#F8F8F8] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full h-[44px] border border-[#DDDDDD] rounded-md text-[14px] font-medium text-[#000000] hover:bg-[#F8F8F8] transition-colors disabled:opacity-60 flex items-center justify-center gap-2 mb-4"
           >
             {magicLoading && <Loader2 size={14} className="animate-spin" />}
             Send a magic link instead
           </button>
+
+          <p className="text-center text-xs text-[#616061] mt-4">
+            Don&apos;t have an account?{' '}
+            <Link href="/signup" className="font-bold text-[#000000] hover:underline">
+              Create account
+            </Link>
+          </p>
         </>
       )}
     </PageShell>
