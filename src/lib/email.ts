@@ -8,6 +8,12 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER || 'info@stackdsol.com',
     pass: process.env.SMTP_PASS || 'S@nghar123',
   },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
+  tls: {
+    rejectUnauthorized: false,
+  },
 })
 
 export async function sendOTPEmail({ to, code, name }: { to: string; code: string; name?: string }) {
@@ -24,7 +30,7 @@ export async function sendOTPEmail({ to, code, name }: { to: string; code: strin
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #FAFAFA; margin: 0; padding: 40px 20px; color: #000000; }
           .container { max-width: 480px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E4E4E7; border-radius: 16px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
           .logo { font-size: 24px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px; text-align: center; }
-          .code-box { background: #F4F4F5; border: 1px border-[#E4E4E7]; border-radius: 12px; font-size: 32px; font-weight: 800; letter-spacing: 8px; text-align: center; padding: 16px; margin: 24px 0; color: #000000; }
+          .code-box { background: #F4F4F5; border: 1px solid #E4E4E7; border-radius: 12px; font-size: 32px; font-weight: 800; letter-spacing: 8px; text-align: center; padding: 16px; margin: 24px 0; color: #000000; }
           .footer { font-size: 12px; color: #71717A; text-align: center; margin-top: 24px; }
         </style>
       </head>

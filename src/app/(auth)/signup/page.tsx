@@ -33,9 +33,18 @@ export default function SignupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, displayName, password }),
       })
-      const data = await res.json()
 
-      if (!res.ok) throw new Error(data.error || 'Failed to send verification code')
+      const text = await res.text()
+      let data: Record<string, unknown> = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        throw new Error('Server returned an unexpected response. Please try again.')
+      }
+
+      if (!res.ok) {
+        throw new Error((data.error as string) || 'Failed to send verification code')
+      }
 
       setInfoMsg(`Verification code sent to ${email} from info@stackdsol.com`)
       setStep('otp')
@@ -58,9 +67,18 @@ export default function SignupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code: otpCode }),
       })
-      const data = await res.json()
 
-      if (!res.ok) throw new Error(data.error || 'Failed to verify code')
+      const text = await res.text()
+      let data: Record<string, unknown> = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        throw new Error('Server returned an unexpected response. Please try again.')
+      }
+
+      if (!res.ok) {
+        throw new Error((data.error as string) || 'Failed to verify code')
+      }
 
       // Success -> Redirect to workspace
       router.push('/')
@@ -76,7 +94,7 @@ export default function SignupPage() {
   const blurStyle  = (e: React.FocusEvent<HTMLInputElement>) => (e.target.style.borderColor = '#E5E7EB')
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#F8FAFC' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-[#FAFAFA]">
       <div className="w-full max-w-sm">
 
         {/* Logo */}
@@ -84,7 +102,7 @@ export default function SignupPage() {
           <Image src="/huddle.svg" alt="Huddle" width={200} height={60} priority />
         </div>
 
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
+        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-xs">
           {step === 'details' ? (
             <>
               <h1 className="text-lg font-bold text-[#000000] mb-1">Create your account</h1>
@@ -103,7 +121,7 @@ export default function SignupPage() {
                     <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                     <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
                       placeholder="Jane Doe" required
-                      className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors"
+                      className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
                   </div>
                 </div>
@@ -114,7 +132,7 @@ export default function SignupPage() {
                     <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@stackdsol.com" required
-                      className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors"
+                      className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
                   </div>
                 </div>
@@ -125,7 +143,7 @@ export default function SignupPage() {
                     <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                     <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                       placeholder="Min. 8 characters" required minLength={8}
-                      className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors"
+                      className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
                   </div>
                 </div>
@@ -145,7 +163,7 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={() => { setStep('details'); setError(null) }}
-                className="flex items-center gap-1 text-xs text-[#6B7280] hover:text-black mb-4 transition-colors"
+                className="flex items-center gap-1 text-xs text-[#6B7280] hover:text-black mb-4 transition-colors cursor-pointer"
               >
                 <ArrowLeft size={13} /> Back
               </button>
@@ -174,7 +192,7 @@ export default function SignupPage() {
                     <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                     <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)}
                       placeholder="123456" maxLength={6} required autoFocus
-                      className="w-full pl-9 pr-3 h-10 text-base font-mono tracking-widest border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-center"
+                      className="w-full pl-9 pr-3 h-10 text-base font-mono tracking-widest border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-center text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
                   </div>
                 </div>
