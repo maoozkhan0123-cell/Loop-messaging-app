@@ -11,6 +11,16 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder'
 
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+  const isAuthPage =
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/signup')
+
+  // Allow all /api routes to bypass auth page redirects
+  if (isApiRoute) {
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
@@ -32,10 +42,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
-  const isAuthPage =
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/signup')
 
   if (!user && !isAuthPage) {
     const url = request.nextUrl.clone()
