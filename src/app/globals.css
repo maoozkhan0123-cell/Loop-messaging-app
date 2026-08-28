@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Monochrome Brand palette ── */
+  --color-brand-blue:   #000000;
+  --color-brand-teal:   #18181B;
+  --color-brand-navy:   #09090B;
+
+  --color-accent:        #000000;
+  --color-accent-hover:  #18181B;
+  --color-accent-light:  #F4F4F5;
+  --color-teal:          #18181B;
+  --color-teal-light:    #F4F4F5;
+
+  /* ── Sidebar (Monochrome black theme) ── */
+  --color-sidebar-bg:      #09090B;
+  --color-sidebar-deeper:  #000000;
+  --color-sidebar-hover:   rgba(255,255,255,0.1);
+  --color-sidebar-active:  rgba(255,255,255,0.2);
+  --color-sidebar-border:  rgba(255,255,255,0.1);
+  --color-sidebar-text:    rgba(255,255,255,0.9);
+  --color-sidebar-muted:   rgba(255,255,255,0.5);
+
+  /* ── Main content area (clean white & stark black) ── */
+  --color-main-bg:    #FFFFFF;
+  --color-thread-bg:  #FAFAFA;
+
+  /* ── Standard UI colors ── */
+  --color-border:        #E4E4E7;
+  --color-border-strong: #27272A;
+
+  --color-text-primary:   #000000;
+  --color-text-secondary: #52525B;
+  --color-text-muted:     #A1A1AA;
+
+  --color-status-online:   #10B981;
+  --color-status-away:     #F59E0B;
+  --color-status-offline:  #A1A1AA;
+
+  --font-ui:      var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-message: var(--font-dm-sans), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #1A1A2E;
+  background: #FFFFFF;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
+
+.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+.message-body {
+  font-family: var(--font-message);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+*:focus-visible {
+  outline: 2px solid #3589FA;
+  outline-offset: 2px;
+}
+
+.message-body a { color: #3589FA; text-decoration: underline; }
+.message-body a:hover { color: #2575E8; }
