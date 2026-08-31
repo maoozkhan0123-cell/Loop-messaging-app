@@ -57,16 +57,16 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
   }, [])
 
   return (
-    <div className="flex flex-1 min-w-0 h-full">
+    <div className="flex flex-1 min-w-0 h-full relative">
       {/* Main pane */}
       <div className="flex flex-col flex-1 min-w-0 h-full bg-white">
 
         {/* Header row 1 */}
         <div className="bg-white border-b border-[#E5E7EB] flex-shrink-0">
-          <div className="flex items-center justify-between px-4 h-[49px]">
+          <div className="flex items-center justify-between px-2 sm:px-4 h-[49px]">
             <button
               type="button"
-              className="flex items-center gap-1.5 font-bold text-[15px] text-[#1D1C1D] hover:bg-[#F8F8F8] px-2 py-1 rounded transition-colors"
+              className="flex items-center gap-1.5 font-bold text-[14px] sm:text-[15px] text-[#1D1C1D] hover:bg-[#F8F8F8] px-1.5 sm:px-2 py-1 rounded transition-colors max-w-[170px] sm:max-w-none"
             >
               {isDM ? (
                 <span className="truncate">{channelName}</span>
@@ -82,8 +82,8 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
             <div className="flex items-center gap-0.5">
               {isDM && (
                 <>
-                  <HeaderIconBtn label="Call" icon={<Headphones size={16} />} />
-                  <HeaderIconBtn label="Notifications" icon={<Bell size={16} />} />
+                  <HeaderIconBtn label="Call" icon={<Headphones size={16} />} className="hidden sm:flex" />
+                  <HeaderIconBtn label="Notifications" icon={<Bell size={16} />} className="hidden sm:flex" />
                 </>
               )}
               {/* In-chat search toggle */}
@@ -99,22 +99,22 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
               )}
               {!isDM && (
                 <>
-                  <div className="w-px h-4 bg-[#E5E7EB] mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 h-7 px-2 rounded text-sm text-[#6B7280] hover:bg-[#F3F4F6] transition-colors">
+                  <div className="w-px h-4 bg-[#E5E7EB] mx-1 hidden sm:block" />
+                  <button type="button" className="hidden sm:flex items-center gap-1.5 h-7 px-2 rounded text-sm text-[#6B7280] hover:bg-[#F3F4F6] transition-colors">
                     <Users size={14} />
                     <span className="text-sm">Members</span>
                   </button>
-                  <HeaderIconBtn label="Details" icon={<Info size={16} />} />
+                  <HeaderIconBtn label="Details" icon={<Info size={16} />} className="hidden sm:flex" />
                 </>
               )}
             </div>
           </div>
 
           {/* Tab bar */}
-          <div className="flex items-center px-4 gap-0" style={{ borderTop: '1px solid #F3F4F6' }}>
+          <div className="flex items-center px-2 sm:px-4 gap-0 overflow-x-auto" style={{ borderTop: '1px solid #F3F4F6' }}>
             <TabButton label="Messages" isActive={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<MessageSquare size={13} />} />
             <TabButton label="Files" isActive={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={<Paperclip size={13} />} />
-            <button type="button" className="flex items-center justify-center w-7 h-7 ml-1 rounded text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-colors">
+            <button type="button" className="flex items-center justify-center w-7 h-7 ml-1 rounded text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-colors flex-shrink-0">
               <Plus size={14} />
             </button>
           </div>
@@ -129,14 +129,14 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
                 transition={{ duration: 0.15 }}
                 className="overflow-hidden border-t border-[#F3F4F6]"
               >
-                <div className="flex items-center gap-2 px-4 h-[44px]">
+                <div className="flex items-center gap-2 px-3 sm:px-4 h-[44px]">
                   <Search size={14} className="text-[#9CA3AF] flex-shrink-0" />
                   <input
                     autoFocus
                     value={chatSearchQuery}
                     onChange={(e) => setChatSearchQuery(e.target.value)}
                     placeholder={`Search in ${isDM ? channelName : '#' + channelName}…`}
-                    className="flex-1 text-[13px] text-[#111827] placeholder-[#9CA3AF] focus:outline-none"
+                    className="flex-1 text-[13px] text-[#111827] placeholder-[#9CA3AF] focus:outline-none min-w-0"
                   />
                   {chatSearchQuery && (
                     <button type="button" onClick={() => setChatSearchQuery('')} className="text-[#9CA3AF] hover:text-[#6B7280]">
@@ -163,9 +163,9 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
             />
 
             {/* Typing indicator */}
-            <div className="px-5 h-5 flex items-center flex-shrink-0">
+            <div className="px-3 sm:px-5 h-5 flex items-center flex-shrink-0">
               {typingUsers.length > 0 && (
-                <p className="text-xs text-[#6B7280]">
+                <p className="text-xs text-[#6B7280] truncate">
                   {typingUsers.map((u) => u.display_name).join(', ')}{' '}
                   {typingUsers.length === 1 ? 'is' : 'are'} typing
                   <TypingDots />
@@ -185,15 +185,15 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
         )}
       </div>
 
-      {/* Thread panel (channels only) */}
+      {/* Thread panel (channels only: side-panel on desktop, full screen overlay on mobile) */}
       <AnimatePresence>
         {threadMessage && !isDM && (
           <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 360, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
             transition={{ duration: 0.2 }}
-            style={{ overflow: 'hidden', flexShrink: 0 }}
+            className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[360px] h-full bg-white flex-shrink-0 border-l border-[#E5E7EB]"
           >
             <ThreadPanel
               message={threadMessage}
@@ -280,7 +280,7 @@ function FilesTab({ channelId, currentUserId }: { channelId: string; currentUser
 
 // ── Subcomponents ──────────────────────────────────────────────────────────
 
-function HeaderIconBtn({ label, icon, onClick, active }: { label: string; icon: React.ReactNode; onClick?: () => void; active?: boolean }) {
+function HeaderIconBtn({ label, icon, onClick, active, className }: { label: string; icon: React.ReactNode; onClick?: () => void; active?: boolean; className?: string }) {
   return (
     <button
       type="button"
@@ -288,7 +288,8 @@ function HeaderIconBtn({ label, icon, onClick, active }: { label: string; icon: 
       onClick={onClick}
       className={cn(
         'w-8 h-8 flex items-center justify-center rounded transition-colors',
-        active ? 'text-[#3589FA] bg-[#EBF5FF]' : 'text-[#6B7280] hover:text-[#1D1C1D] hover:bg-[#F3F4F6]'
+        active ? 'text-[#3589FA] bg-[#EBF5FF]' : 'text-[#6B7280] hover:text-[#1D1C1D] hover:bg-[#F3F4F6]',
+        className
       )}
     >
       {icon}

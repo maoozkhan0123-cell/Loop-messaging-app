@@ -10,12 +10,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Keep staleTime low so realtime invalidations always trigger a refetch.
-            // Individual hooks that need longer caching (e.g. profiles) override this.
-            staleTime: 0,
-            gcTime: 5 * 60 * 1000, // keep data in cache for 5 min even when unused
+            // Serve cached data instantly from memory (0-2ms latency).
+            // Realtime subscriptions handle surgical updates as changes arrive.
+            staleTime: 60 * 1000,
+            gcTime: 10 * 60 * 1000, // keep data in cache for 10 min
             refetchOnWindowFocus: false,
-            retry: 2,
+            refetchOnMount: false,
+            retry: 1,
           },
         },
       })

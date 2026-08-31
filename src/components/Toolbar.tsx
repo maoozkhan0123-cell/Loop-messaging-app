@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Hash, Lock, MessageSquare, SquarePen, ChevronDown, Users } from 'lucide-react'
+import { Search, Hash, Lock, MessageSquare, SquarePen, ChevronDown, Users, Menu } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useChannels, useCreateDM } from '@/hooks/useChannels'
 import { useAllProfiles } from '@/hooks/useProfiles'
 import { useProfile } from '@/hooks/useProfile'
 import { useSearch } from '@/hooks/useSearch'
+import { useMobileNav } from '@/components/AppShell'
 import { Avatar } from '@/components/ui/Avatar'
 import type { ChannelWithMember, Profile } from '@/types/database'
 
@@ -18,6 +19,7 @@ type ResultItem =
 
 export function Toolbar() {
   const router = useRouter()
+  const { toggleMobileMenu } = useMobileNav()
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(0)
@@ -157,24 +159,37 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex items-center gap-3 flex-shrink-0 px-4 relative z-30"
+      className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 px-2 sm:px-4 relative z-30"
       style={{
         height: 41,
         background: '#0D1F31',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}
     >
+      {/* ── Mobile menu toggle button ── */}
+      <button
+        type="button"
+        onClick={toggleMobileMenu}
+        className="md:hidden p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+        title="Open navigation menu"
+      >
+        <Menu size={18} />
+      </button>
+
       {/* ── Workspace name ── */}
       <button
         type="button"
-        className="flex items-center gap-1.5 flex-shrink-0 hover:bg-white/10 rounded-lg px-2 py-1 transition-colors"
+        className="flex items-center gap-1 flex-shrink-0 hover:bg-white/10 rounded-lg px-1.5 sm:px-2 py-1 transition-colors"
         onClick={() => router.push('/')}
       >
-        <span className="font-bold text-[15px] text-white tracking-tight">StackdSol</span>
-        <ChevronDown size={13} className="text-white/70" />
+        <span className="font-bold text-[14px] sm:text-[15px] text-white tracking-tight truncate max-w-[90px] sm:max-w-none">
+          StackdSol
+        </span>
+        <ChevronDown size={13} className="text-white/70 flex-shrink-0" />
       </button>
 
-      <div className="w-px h-5 bg-white/20 flex-shrink-0" />
+      <div className="w-px h-5 bg-white/20 flex-shrink-0 hidden sm:block" />
+
 
       {/* ── Inline search input ── */}
       <div className="flex-1 max-w-xl mx-auto relative">

@@ -329,7 +329,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const canSend = (!!body.trim() || pendingFiles.length > 0) && !isSending && !overLimit
 
   return (
-    <div className="px-4 pb-4 flex-shrink-0">
+    <div className="px-2 sm:px-4 pb-2 sm:pb-4 flex-shrink-0">
       {error && <p className="text-xs text-red-500 mb-1 px-1 whitespace-pre-wrap">{error}</p>}
       {nearLimit && !error && (
         <p className={cn('text-xs mb-1 px-1 text-right', overLimit ? 'text-red-500' : 'text-[#9CA3AF]')}>
@@ -347,7 +347,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         onDrop={handleDrop}
       >
         {/* Formatting toolbar */}
-        <div className="flex items-center gap-0.5 px-3 pt-2 pb-1.5 border-b border-[#F3F4F6]">
+        <div className="flex items-center gap-0.5 px-2 sm:px-3 pt-2 pb-1.5 border-b border-[#F3F4F6] overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           <FmtBtn title="Bold (Ctrl+B)" onClick={() => wrapSelection('**')}><Bold size={13} /></FmtBtn>
           <FmtBtn title="Italic (Ctrl+I)" onClick={() => wrapSelection('_')}><Italic size={13} /></FmtBtn>
           <FmtBtn title="Strikethrough" onClick={() => wrapSelection('~~')}><Strikethrough size={13} /></FmtBtn>

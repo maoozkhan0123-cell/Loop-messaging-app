@@ -55,44 +55,44 @@ export default function IdeasPage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
       {/* Page Header */}
-      <header className="bg-white border-b border-[#E4E4E7] px-6 py-4 flex flex-wrap items-center justify-between gap-4 flex-shrink-0 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center text-white shadow-sm">
-            <Lightbulb size={20} />
+      <header className="bg-white border-b border-[#E4E4E7] px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 flex-shrink-0 shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-black flex items-center justify-center text-white shadow-sm flex-shrink-0">
+            <Lightbulb size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-[#000000]">Team Ideas</h1>
-            <p className="text-xs text-[#71717A]">
+            <h1 className="text-base sm:text-lg font-bold text-[#000000]">Team Ideas</h1>
+            <p className="text-xs text-[#71717A] hidden sm:block">
               Share ideas and suggestions so everyone on the team can review and collaborate.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Search bar */}
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+          <div className="relative flex-1 sm:flex-none">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
             <input
               type="text"
               placeholder="Search team ideas..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-xs bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg w-52 focus:outline-none focus:border-[#000000] focus:bg-white transition-all"
+              className="pl-8 pr-3 py-1.5 text-xs bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg w-full sm:w-52 focus:outline-none focus:border-[#000000] focus:bg-white transition-all"
             />
           </div>
 
           <button
             type="button"
             onClick={() => setShowSubmitModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-[#18181B] rounded-xl shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-black hover:bg-[#18181B] rounded-xl shadow-xs transition-all cursor-pointer"
           >
-            <Plus size={16} /> Submit New Idea
+            <Plus size={15} /> Submit Idea
           </button>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 p-6 overflow-y-auto max-w-4xl w-full mx-auto space-y-4">
+      <main className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-4xl w-full mx-auto space-y-4">
         {isLoading ? (
           <div className="py-20 flex items-center justify-center text-[#A1A1AA] text-sm gap-2">
             <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />

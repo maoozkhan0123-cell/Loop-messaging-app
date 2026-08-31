@@ -38,10 +38,16 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
-  // Refresh session — do not remove this
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Refresh session — handle invalid or expired refresh tokens gracefully
+  let user = null
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (!error) {
+      user = data.user
+    }
+  } catch {
+    // Invalid/expired refresh token — treat as unauthenticated
+  }
 
   if (!user && !isAuthPage) {
     const url = request.nextUrl.clone()

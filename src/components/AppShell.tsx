@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, createContext, useContext } from 'react'
+import { usePathname } from 'next/navigation'
 import { IconRail } from '@/components/sidebar/IconRail'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
@@ -8,14 +9,37 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useProfile } from '@/hooks/useProfile'
 import { useChannels } from '@/hooks/useChannels'
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications'
+import { X } from 'lucide-react'
+
+interface MobileNavContextType {
+  mobileMenuOpen: boolean
+  setMobileMenuOpen: (open: boolean) => void
+  toggleMobileMenu: () => void
+  closeMobileMenu: () => void
+}
+
+export const MobileNavContext = createContext<MobileNavContextType>({
+  mobileMenuOpen: false,
+  setMobileMenuOpen: () => {},
+  toggleMobileMenu: () => {},
+  closeMobileMenu: () => {},
+})
+
+export const useMobileNav = () => useContext(MobileNavContext)
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
   const { data: myProfile } = useProfile()
   const { data: channels } = useChannels()
 
+  // Auto-close mobile navigation drawer on route change
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [pathname])
+
   // Stable channel ID list — used by global notification subscription.
-  // useMemo prevents effect re-run on every render (only re-subscribes when membership changes).
   const channelIds = useMemo(
     () => channels?.map((c) => c.id) ?? [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -24,40 +48,96 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useGlobalNotifications(myProfile?.id, channelIds)
 
+  const toggleMobileMenu = () => setMobileMenuOpen((v) => !v)
+  const closeMobileMenu = () => setMobileMenuOpen(false)
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#0D1F31' }}>
-      {/* ── Top toolbar: spans full width (like Slack's top bar) ── */}
-      <Toolbar />
+    <MobileNavContext.Provider
+      value={{ mobileMenuOpen, setMobileMenuOpen, toggleMobileMenu, closeMobileMenu }}
+    >
+      <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#0D1F31' }}>
+        {/* ── Top toolbar: spans full width ── */}
+        <Toolbar />
 
-      {/* ── Body: icon rail + sidebar + content ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* 70px icon rail — always visible */}
-        <IconRail
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        />
+        {/* ── Body: sidebar (desktop/mobile) + content ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden relative">
+          {/* Desktop view: side-by-side icon rail + workspace sidebar */}
+          <div className="hidden md:flex flex-shrink-0 h-full">
+            <IconRail
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            />
 
-        {/* Workspace sidebar — collapsible */}
-        <AnimatePresence initial={false}>
-          {sidebarOpen && (
-            <motion.div
-              key="workspace-sidebar"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 260, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: 'easeInOut' }}
-              className="flex-shrink-0 h-full overflow-hidden"
-            >
-              <Sidebar />
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <AnimatePresence initial={false}>
+              {sidebarOpen && (
+                <motion.div
+                  key="workspace-sidebar"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 260, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: 'easeInOut' }}
+                  className="flex-shrink-0 h-full overflow-hidden"
+                >
+                  <Sidebar />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-        {/* Main content area */}
-        <div className="flex flex-1 min-w-0 h-full bg-white rounded-tl-xl overflow-hidden shadow-xl">
-          {children}
+          {/* Mobile view: slide-over navigation drawer with backdrop */}
+          <AnimatePresence>
+            {mobileMenuOpen && (
+              <>
+                {/* Overlay backdrop */}
+                <motion.div
+                  key="mobile-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={closeMobileMenu}
+                  className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden"
+                />
+
+                {/* Mobile Drawer */}
+                <motion.div
+                  key="mobile-drawer"
+                  initial={{ x: '-100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '-100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+                  className="fixed top-0 left-0 bottom-0 z-50 flex shadow-2xl md:hidden max-w-[85vw]"
+                >
+                  <div className="flex h-full">
+                    <IconRail
+                      sidebarOpen={true}
+                      onToggleSidebar={closeMobileMenu}
+                    />
+                    <div className="h-full relative">
+                      <Sidebar />
+                      {/* Close button inside mobile menu */}
+                      <button
+                        type="button"
+                        onClick={closeMobileMenu}
+                        className="absolute top-3 right-3 p-1 rounded-full bg-white/10 text-white/70 hover:text-white hover:bg-white/20 transition-colors z-30"
+                        title="Close menu"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* Main content area */}
+          <div className="flex flex-1 min-w-0 h-full bg-white md:rounded-tl-xl overflow-hidden shadow-xl">
+            {children}
+          </div>
         </div>
       </div>
-    </div>
+    </MobileNavContext.Provider>
   )
 }
+

@@ -10,6 +10,7 @@ import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
 import { useNotifications } from '@/hooks/useNotifications'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { useMobileNav } from '@/components/AppShell'
 
 interface IconRailProps {
   sidebarOpen: boolean
@@ -19,6 +20,7 @@ interface IconRailProps {
 export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const { closeMobileMenu } = useMobileNav()
   const { data: profile } = useProfile()
   const updateProfile = useUpdateProfile()
   const supabase = createClient()
@@ -92,11 +94,11 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
 
       {/* Nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
-        <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => router.push('/')} />
-        <RailBtn icon={MessagesSquare} label="DMs" isActive={isDM} onClick={() => router.push('/people')} />
-        <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => router.push('/files')} />
-        <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => router.push('/projects')} />
-        <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => router.push('/ideas')} />
+        <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { closeMobileMenu(); router.push('/') }} />
+        <RailBtn icon={MessagesSquare} label="DMs" isActive={isDM} onClick={() => { closeMobileMenu(); router.push('/people') }} />
+        <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { closeMobileMenu(); router.push('/files') }} />
+        <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { closeMobileMenu(); router.push('/projects') }} />
+        <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { closeMobileMenu(); router.push('/ideas') }} />
         <RailBtn icon={MoreHorizontal} label="More" isActive={false} onClick={() => {}} />
       </div>
 

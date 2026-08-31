@@ -127,17 +127,17 @@ export default function ProjectsPage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
       {/* Top Header */}
-      <header className="bg-white border-b border-[#E4E4E7] px-6 py-4 flex flex-wrap items-center justify-between gap-4 flex-shrink-0 z-10 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center text-white shadow-sm">
-            <Kanban size={20} />
+      <header className="bg-white border-b border-[#E4E4E7] px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 flex-shrink-0 z-10 shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-black flex items-center justify-center text-white shadow-sm flex-shrink-0">
+            <Kanban size={18} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <select
                 value={activeBoardId || ''}
                 onChange={(e) => setSelectedBoardId(e.target.value)}
-                className="text-lg font-bold text-[#000000] bg-transparent focus:outline-none cursor-pointer border border-transparent hover:border-[#E4E4E7] rounded-lg px-2 py-0.5 transition-colors"
+                className="text-base sm:text-lg font-bold text-[#000000] bg-transparent focus:outline-none cursor-pointer border border-transparent hover:border-[#E4E4E7] rounded-lg px-1 sm:px-2 py-0.5 transition-colors max-w-[160px] sm:max-w-none truncate"
               >
                 {boards.length === 0 && <option value="">No Project Boards</option>}
                 {boards.map((b) => (
@@ -147,23 +147,23 @@ export default function ProjectsPage() {
                 ))}
               </select>
             </div>
-            <p className="text-xs text-[#71717A]">
+            <p className="text-xs text-[#71717A] hidden sm:block">
               {currentBoard?.description || 'Track team tasks and project progress'}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Search bar */}
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+          <div className="relative flex-1 sm:flex-none">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
             <input
               type="text"
               placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-xs bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg w-48 focus:outline-none focus:border-[#000000] focus:bg-white transition-all"
+              className="pl-8 pr-3 py-1.5 text-xs bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg w-full sm:w-48 focus:outline-none focus:border-[#000000] focus:bg-white transition-all"
             />
           </div>
 
@@ -209,7 +209,7 @@ export default function ProjectsPage() {
       </header>
 
       {/* Main Board View */}
-      <main className="flex-1 p-6 overflow-x-auto overflow-y-hidden">
+      <main className="flex-1 p-3 sm:p-6 overflow-x-auto overflow-y-hidden">
         {isLoading ? (
           <div className="h-full flex items-center justify-center text-[#9CA3AF] text-sm gap-2">
             <div className="w-5 h-5 border-2 border-[#1E40AF] border-t-transparent rounded-full animate-spin" />
@@ -217,7 +217,7 @@ export default function ProjectsPage() {
           </div>
         ) : boards.length === 0 ? (
           /* Empty state */
-          <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto">
+          <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto px-4">
             <div className="w-16 h-16 rounded-2xl bg-[#EFF6FF] flex items-center justify-center text-[#1E40AF] mb-4">
               <Kanban size={32} />
             </div>
@@ -235,14 +235,14 @@ export default function ProjectsPage() {
           </div>
         ) : (
           /* Kanban Board Columns */
-          <div className="h-full flex items-start gap-5 pb-4">
+          <div className="h-full flex items-start gap-4 sm:gap-5 pb-4">
             {columns.map((col) => {
               const colTasks = filteredTasks.filter((t) => t.column_id === col.id)
 
               return (
                 <div
                   key={col.id}
-                  className="w-80 flex-shrink-0 flex flex-col max-h-full bg-[#EBEEF2] rounded-2xl border border-[#E2E8F0] shadow-xs"
+                  className="w-72 sm:w-80 flex-shrink-0 flex flex-col max-h-full bg-[#EBEEF2] rounded-2xl border border-[#E2E8F0] shadow-xs"
                 >
                   {/* Column Header */}
                   <div className="p-3.5 flex items-center justify-between border-b border-[#E2E8F0] bg-white/60 rounded-t-2xl">

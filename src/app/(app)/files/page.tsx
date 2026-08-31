@@ -51,18 +51,18 @@ export default function FilesPage() {
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
-      <div className="border-b border-[#E5E7EB] px-6 pt-5 pb-0 flex-shrink-0">
-        <h1 className="text-[22px] font-bold text-[#111827] mb-3">Files</h1>
+      <div className="border-b border-[#E5E7EB] px-4 sm:px-6 pt-4 sm:pt-5 pb-0 flex-shrink-0">
+        <h1 className="text-[20px] sm:text-[22px] font-bold text-[#111827] mb-2 sm:mb-3">Files</h1>
 
         {/* Filter tabs */}
-        <div className="flex items-center gap-0">
+        <div className="flex items-center gap-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {(['all', 'images', 'documents', 'other'] as FilterType[]).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setFilter(tab)}
               className={cn(
-                'flex items-center gap-1.5 h-9 px-4 text-[13px] font-medium border-b-2 transition-all capitalize',
+                'flex items-center gap-1.5 h-9 px-3 sm:px-4 text-[13px] font-medium border-b-2 transition-all capitalize flex-shrink-0',
                 filter === tab
                   ? 'text-[#3589FA] border-[#3589FA]'
                   : 'text-[#6B7280] border-transparent hover:text-[#1D1C1D]'
@@ -84,14 +84,14 @@ export default function FilesPage() {
       </div>
 
       {/* Search bar */}
-      <div className="px-6 py-3 border-b border-[#F3F4F6] flex-shrink-0">
+      <div className="px-4 sm:px-6 py-3 border-b border-[#F3F4F6] flex-shrink-0">
         <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] max-w-sm focus-within:border-[#3589FA] focus-within:bg-white transition-colors">
           <Search size={14} className="text-[#9CA3AF] flex-shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search files…"
-            className="flex-1 text-[13px] bg-transparent focus:outline-none text-[#111827] placeholder-[#9CA3AF]"
+            className="flex-1 text-[13px] bg-transparent focus:outline-none text-[#111827] placeholder-[#9CA3AF] min-w-0"
           />
           {search && (
             <button type="button" onClick={() => setSearch('')} className="text-[#9CA3AF] hover:text-[#6B7280]">
@@ -108,7 +108,7 @@ export default function FilesPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
+          <div className="text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-[#F3F4F6] flex items-center justify-center mx-auto mb-3">
               <FileText size={28} className="text-[#D1D5DB]" />
             </div>
@@ -119,7 +119,7 @@ export default function FilesPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
           <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-3">
             {filtered.length} file{filtered.length !== 1 ? 's' : ''}
           </p>

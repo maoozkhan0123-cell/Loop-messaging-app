@@ -42,25 +42,25 @@ export function useChannels() {
         return ch.type === 'dm' || ch.type === 'group_dm'
       })
 
-      // ── Queries 2 + 3 + 4 run IN PARALLEL ───────────────────────────────
-      const [unreadResults, dmMemberRows, allProfiles] = await Promise.all([
+      // ── Step 2: Batch DM members and unread messages in parallel (2 queries max) ──
+      const channelsWithLastRead = active.filter((m) => m.last_read_at)
+      const minLastRead = channelsWithLastRead.length > 0
+        ? channelsWithLastRead.reduce((min, m) => (m.last_read_at! < min ? m.last_read_at! : min), channelsWithLastRead[0].last_read_at!)
+        : null
 
-        // Query 2: all unread counts in parallel sub-promises (batched per channel)
-        Promise.all(
-          active.map(async (m) => {
-            if (!m.last_read_at) return { channelId: m.channel_id, count: 0 }
-            const { count } = await supabase
+      const [unreadRes, dmMemberRes] = await Promise.all([
+        // Query 2a: fetch unread messages across ALL channels in ONE query (not N queries)
+        minLastRead && channelsWithLastRead.length > 0
+          ? supabase
               .from('messages')
-              .select('id', { count: 'exact', head: true })
-              .eq('channel_id', m.channel_id)
+              .select('channel_id, created_at')
+              .in('channel_id', channelsWithLastRead.map((m) => m.channel_id))
               .is('deleted_at', null)
               .is('parent_id', null)
-              .gt('created_at', m.last_read_at)
-            return { channelId: m.channel_id, count: count ?? 0 }
-          })
-        ),
+              .gt('created_at', minLastRead)
+          : Promise.resolve({ data: [] }),
 
-        // Query 3: all DM other-member user_ids in ONE query (not one per DM)
+        // Query 2b: all DM other-member IDs in ONE query
         dmMemberships.length > 0
           ? supabase
               .from('channel_members')
@@ -68,27 +68,25 @@ export function useChannels() {
               .in('channel_id', dmMemberships.map((m) => m.channel_id))
               .neq('user_id', user.id)
           : Promise.resolve({ data: [] }),
-
-        // Query 4: all profiles at once — used for DM other-member display
-        supabase.from('profiles').select('*').in(
-          'id',
-          // pre-fetch profiles for all potential DM partners from existing memberships
-          // (we refine after query 3 resolves, but this gives us a superset cheaply)
-          channelIds.length > 0 ? [user.id] : []
-        ),
       ])
 
-      // Build lookup maps — O(n) one-time cost, then O(1) access
-      const unreadMap = new Map<string, number>(
-        unreadResults.map((r) => [r.channelId, r.count])
-      )
+      // Build unread count map in memory (O(n) in JS, 1ms execution)
+      const unreadMap = new Map<string, number>()
+      if (unreadRes.data && channelsWithLastRead.length > 0) {
+        const lastReadMap = new Map(channelsWithLastRead.map((m) => [m.channel_id, m.last_read_at!]))
+        for (const msg of unreadRes.data as Array<{ channel_id: string; created_at: string }>) {
+          const lastRead = lastReadMap.get(msg.channel_id)
+          if (lastRead && msg.created_at > lastRead) {
+            unreadMap.set(msg.channel_id, (unreadMap.get(msg.channel_id) ?? 0) + 1)
+          }
+        }
+      }
 
       const channelToOtherUserId = new Map<string, string>(
-        ((dmMemberRows as { data: Array<{ channel_id: string; user_id: string }> | null }).data ?? [])
-          .map((r) => [r.channel_id, r.user_id])
+        (dmMemberRes.data as Array<{ channel_id: string; user_id: string }> ?? []).map((r) => [r.channel_id, r.user_id])
       )
 
-      // Fetch profiles for the actual DM other-member IDs we now know
+      // Fetch profiles for the actual DM other-member IDs
       const dmUserIds = [...new Set(channelToOtherUserId.values())]
       let profileMap = new Map<string, Profile>()
       if (dmUserIds.length > 0) {

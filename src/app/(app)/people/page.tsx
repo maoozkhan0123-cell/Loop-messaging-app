@@ -65,9 +65,9 @@ export default function PeoplePage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-white border-b border-[#E2E8F0]">
-        <div className="px-6 pt-7 pb-5">
+        <div className="px-4 sm:px-6 pt-5 sm:pt-7 pb-4 sm:pb-5">
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-[22px] font-bold text-[#0F172A] tracking-tight">Team Directory</h1>
+            <h1 className="text-[20px] sm:text-[22px] font-bold text-[#0F172A] tracking-tight">Team Directory</h1>
             {profiles && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold bg-[#EFF6FF] text-[#3589FA]">
                 <Users size={11} />
@@ -75,11 +75,11 @@ export default function PeoplePage() {
               </span>
             )}
           </div>
-          <p className="text-[13px] text-[#64748B]">Find teammates, view profiles, and start conversations</p>
+          <p className="text-[12.5px] sm:text-[13px] text-[#64748B]">Find teammates, view profiles, and start conversations</p>
         </div>
 
         {/* Search */}
-        <div className="px-6 pb-5">
+        <div className="px-4 sm:px-6 pb-4 sm:pb-5">
           <div className="relative max-w-lg">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
             <input
@@ -94,7 +94,7 @@ export default function PeoplePage() {
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 size={22} className="animate-spin text-[#3589FA]" />
@@ -154,7 +154,7 @@ function PeopleGrid({
   onMessage: (id: string) => void
 }) {
   return (
-    <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {profiles.map((profile) => (
         <PersonCard
           key={profile.id}

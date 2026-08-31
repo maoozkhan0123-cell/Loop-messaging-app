@@ -22,6 +22,7 @@ export function useProfile() {
       if (error) throw new Error(error.message)
       return data as Profile
     },
+    staleTime: 5 * 60 * 1000, // 5 min cache — updated via mutations
   })
 }
 

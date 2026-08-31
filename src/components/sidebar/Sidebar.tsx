@@ -10,6 +10,7 @@ import { useAllProfiles } from '@/hooks/useProfiles'
 import { useProfile } from '@/hooks/useProfile'
 import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
+import { useMobileNav } from '@/components/AppShell'
 import type { Profile } from '@/types/database'
 
 const TEXT_DEFAULT = 'rgba(255,255,255,0.85)'
@@ -19,6 +20,7 @@ const BORDER = 'rgba(255,255,255,0.07)'
 export function Sidebar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { closeMobileMenu } = useMobileNav()
 
   const { data: channels, isLoading } = useChannels()
   const { data: allProfiles } = useAllProfiles()
@@ -358,9 +360,11 @@ function SidebarSection({
 }
 
 function NavLink({ href, isActive, children }: { href: string; isActive: boolean; children: React.ReactNode }) {
+  const { closeMobileMenu } = useMobileNav()
   return (
     <Link
       href={href}
+      onClick={closeMobileMenu}
       className={cn(
         'flex items-center gap-2 h-8 px-3 mx-1 text-[13px] rounded transition-colors',
         isActive ? 'bg-white/15 text-white font-semibold' : 'hover:bg-white/08 font-normal'
