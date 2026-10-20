@@ -53,14 +53,14 @@ export default function ProfilePage() {
       // Upload new avatar if selected
       if (avatarFile) {
         const ext = avatarFile.name.split('.').pop()
-        const path = `avatars/${profile?.id}-${Date.now()}.${ext}`
+        const path = `${profile?.id}/avatar-${Date.now()}.${ext}`
         const { error: uploadErr } = await supabase.storage
-          .from('attachments')
+          .from('avatars')
           .upload(path, avatarFile, { upsert: true, contentType: avatarFile.type })
 
         if (uploadErr) throw new Error(uploadErr.message)
 
-        const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(path)
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
         avatar_url = urlData.publicUrl
       }
 

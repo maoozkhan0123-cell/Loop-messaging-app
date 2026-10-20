@@ -44,9 +44,29 @@ serve(async (req) => {
       })
     }
 
+    const { data: attachment } = await supabase
+      .from('attachments').select('message_id').eq('object_key', objectKey).maybeSingle()
+    if (!attachment) {
+      return new Response(JSON.stringify({ error: 'File not found' }), {
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const { data: message } = await supabase
+      .from('messages').select('channel_id').eq('id', attachment.message_id).maybeSingle()
+    const { data: membership } = message ? await supabase
+      .from('channel_members').select('channel_id')
+      .eq('channel_id', message.channel_id).eq('user_id', user.id).maybeSingle() : { data: null }
+    if (!membership) {
+      return new Response(JSON.stringify({ error: 'You do not have access to this file' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const safeExpiry = Math.min(Math.max(Number(expiresIn) || 3600, 60), 3600)
+
     const { data, error } = await supabase.storage
       .from('attachments')
-      .createSignedUrl(objectKey, expiresIn)
+      .createSignedUrl(objectKey, safeExpiry)
 
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {

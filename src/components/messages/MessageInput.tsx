@@ -98,6 +98,10 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   // By the time the user clicks Send, upload is done (or close to done).
   // Send only needs to write the tiny DB record — images appear in milliseconds.
   const addFiles = useCallback((newFiles: File[]) => {
+    if (!profile?.id) {
+      setError('Your session is not ready. Please refresh and try again.')
+      return
+    }
     const valid: File[] = []
     const rejected: string[] = []
 
@@ -121,7 +125,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
 
     for (const file of valid) {
       const safeExt = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase().replace(/[^a-z0-9]/g, '') : 'bin'
-      const objectKey = `${crypto.randomUUID()}.${safeExt}`
+      const objectKey = `${profile.id}/${channelId}/${crypto.randomUUID()}.${safeExt}`
       const promise = supabase.storage
         .from('attachments')
         .upload(objectKey, file, { upsert: false })
@@ -133,7 +137,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         })
       uploadPromisesRef.current.set(file, promise)
     }
-  }, [supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase, profile?.id, channelId])
 
   const removeFile = (idx: number) => {
     const file = pendingFiles[idx]

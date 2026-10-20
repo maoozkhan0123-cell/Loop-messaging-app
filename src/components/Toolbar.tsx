@@ -183,7 +183,7 @@ export function Toolbar() {
         onClick={() => router.push('/')}
       >
         <span className="font-bold text-[14px] sm:text-[15px] text-white tracking-tight truncate max-w-[90px] sm:max-w-none">
-          StackdSol
+          Bytechsol
         </span>
         <ChevronDown size={13} className="text-white/70 flex-shrink-0" />
       </button>
@@ -207,7 +207,7 @@ export function Toolbar() {
             onChange={(e) => { setQuery(e.target.value); setSelectedIdx(0) }}
             onFocus={() => setFocused(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search StackdSol"
+            placeholder="Search Bytechsol"
             className="flex-1 bg-transparent text-[13px] text-white placeholder-white/40 focus:outline-none min-w-0"
           />
           {!query && (

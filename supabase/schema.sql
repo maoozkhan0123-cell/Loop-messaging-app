@@ -472,6 +472,197 @@ begin
 end $$;
 
 -- ============================================================
+-- 11. APPLICATION COMPLETION & SECURITY HARDENING
+-- Keep this section aligned with migration 007_complete_app_schema.sql.
+-- ============================================================
+
+-- These feature tables are declared here because the completion rules below
+-- reference them. Their detailed section later in this file is idempotent.
+create table if not exists project_boards (
+  id uuid primary key default uuid_generate_v4(), name text not null, description text,
+  created_by uuid references profiles(id) on delete set null,
+  created_at timestamptz not null default now(), archived_at timestamptz
+);
+create table if not exists project_columns (
+  id uuid primary key default uuid_generate_v4(), board_id uuid not null references project_boards(id) on delete cascade,
+  name text not null, position integer not null default 0, created_at timestamptz not null default now()
+);
+create table if not exists project_tasks (
+  id uuid primary key default uuid_generate_v4(), board_id uuid not null references project_boards(id) on delete cascade,
+  column_id uuid not null references project_columns(id) on delete cascade, title text not null, description text,
+  priority text default 'medium' check (priority in ('low', 'medium', 'high', 'urgent')), due_date timestamptz,
+  assignee_id uuid references profiles(id) on delete set null, created_by uuid references profiles(id) on delete set null,
+  position integer not null default 0, created_at timestamptz not null default now()
+);
+create table if not exists project_task_comments (
+  id uuid primary key default uuid_generate_v4(), task_id uuid not null references project_tasks(id) on delete cascade,
+  user_id uuid references profiles(id) on delete set null, comment text not null, created_at timestamptz not null default now()
+);
+create table if not exists ideas (
+  id uuid primary key default uuid_generate_v4(), title text not null, description text not null,
+  status text default 'under_review' check (status in ('under_review', 'planned', 'in_progress', 'completed', 'archived')),
+  author_id uuid references profiles(id) on delete set null, created_at timestamptz not null default now()
+);
+create table if not exists idea_comments (
+  id uuid primary key default uuid_generate_v4(), idea_id uuid not null references ideas(id) on delete cascade,
+  author_id uuid references profiles(id) on delete set null, content text not null, created_at timestamptz not null default now()
+);
+
+create index if not exists messages_channel_parent_created_idx on messages(channel_id, parent_id, created_at desc);
+create index if not exists attachments_uploader_created_idx on attachments(uploader_id, created_at desc);
+create index if not exists project_boards_active_created_idx on project_boards(archived_at, created_at desc);
+create index if not exists project_tasks_assignee_idx on project_tasks(assignee_id) where assignee_id is not null;
+create index if not exists project_task_comments_user_idx on project_task_comments(user_id) where user_id is not null;
+create index if not exists ideas_author_created_idx on ideas(author_id, created_at desc);
+create index if not exists idea_comments_author_idx on idea_comments(author_id) where author_id is not null;
+
+drop policy if exists "Anyone can read profiles" on profiles;
+drop policy if exists "Authenticated users can read profiles" on profiles;
+create policy "Authenticated users can read profiles" on profiles for select to authenticated using (true);
+drop policy if exists "Service role can insert profiles" on profiles;
+
+drop policy if exists "Authenticated users can join public channels" on channel_members;
+drop policy if exists "Users can join public channels" on channel_members;
+create policy "Users can join public channels" on channel_members for insert to authenticated
+with check (
+  user_id = auth.uid() and role = 'member'
+  and exists (select 1 from channels c where c.id = channel_id and c.type = 'public' and c.archived_at is null)
+);
+
+drop policy if exists "Uploaders can insert attachments" on attachments;
+drop policy if exists "Members can insert attachments" on attachments;
+create policy "Members can insert attachments" on attachments for insert to authenticated
+with check (
+  uploader_id = auth.uid() and exists (
+    select 1 from messages m join channel_members cm on cm.channel_id = m.channel_id
+    where m.id = message_id and cm.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Uploaders can delete attachments" on attachments;
+create policy "Uploaders can delete attachments" on attachments for delete to authenticated using (uploader_id = auth.uid());
+
+drop policy if exists "Authenticated users can insert project boards" on project_boards;
+create policy "Authenticated users can insert project boards" on project_boards for insert to authenticated with check (created_by = auth.uid());
+drop policy if exists "Authenticated users can insert project tasks" on project_tasks;
+create policy "Authenticated users can insert project tasks" on project_tasks for insert to authenticated with check (created_by = auth.uid());
+drop policy if exists "Authenticated users can insert project task comments" on project_task_comments;
+create policy "Authenticated users can insert project task comments" on project_task_comments for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "Authenticated users can insert ideas" on ideas;
+create policy "Authenticated users can insert ideas" on ideas for insert to authenticated with check (author_id = auth.uid());
+drop policy if exists "Authenticated users can insert idea comments" on idea_comments;
+create policy "Authenticated users can insert idea comments" on idea_comments for insert to authenticated with check (author_id = auth.uid());
+
+drop policy if exists "Authenticated users can upload avatars" on storage.objects;
+create policy "Authenticated users can upload avatars" on storage.objects for insert to authenticated
+with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "Users can update avatars" on storage.objects;
+create policy "Users can update avatars" on storage.objects for update to authenticated
+using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Replace channel creation so every current user receives a new public channel.
+create or replace function create_channel(p_name text, p_type text default 'public', p_topic text default null)
+returns uuid language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_channel_id uuid; v_name text := nullif(btrim(p_name), '');
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if v_name is null or char_length(v_name) > 80 then raise exception 'Channel name must be between 1 and 80 characters'; end if;
+  if p_type not in ('public', 'private') then raise exception 'Only public or private channels can be created here'; end if;
+  insert into channels(type, name, topic, created_by)
+  values(p_type, v_name, nullif(btrim(p_topic), ''), auth.uid()) returning id into v_channel_id;
+  if p_type = 'public' then
+    insert into channel_members(channel_id, user_id, role)
+    select v_channel_id, p.id, case when p.id = auth.uid() then 'owner' else 'member' end from profiles p
+    on conflict(channel_id, user_id) do nothing;
+  else
+    insert into channel_members(channel_id, user_id, role) values(v_channel_id, auth.uid(), 'owner');
+  end if;
+  return v_channel_id;
+end; $$;
+
+create or replace function create_dm_channel(target_user_id uuid)
+returns uuid language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_channel_id uuid; v_pair_key text;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if target_user_id is null or target_user_id = auth.uid() then raise exception 'Choose another user for a direct message'; end if;
+  if not exists(select 1 from profiles where id = target_user_id) then raise exception 'Target user does not exist'; end if;
+  v_pair_key := least(auth.uid()::text, target_user_id::text) || ':' || greatest(auth.uid()::text, target_user_id::text);
+  perform pg_advisory_xact_lock(hashtextextended(v_pair_key, 0));
+  select c.id into v_channel_id from channels c
+  join channel_members mine on mine.channel_id = c.id and mine.user_id = auth.uid()
+  join channel_members theirs on theirs.channel_id = c.id and theirs.user_id = target_user_id
+  where c.type = 'dm' and c.archived_at is null
+    and (select count(*) from channel_members x where x.channel_id = c.id) = 2
+  order by c.created_at limit 1;
+  if v_channel_id is null then
+    insert into channels(type, created_by) values('dm', auth.uid()) returning id into v_channel_id;
+    insert into channel_members(channel_id, user_id, role)
+    values(v_channel_id, auth.uid(), 'member'), (v_channel_id, target_user_id, 'member');
+  end if;
+  return v_channel_id;
+end; $$;
+
+create or replace function send_message(p_channel_id uuid, p_body text, p_parent_id uuid default null)
+returns uuid language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_id uuid; v_body text := nullif(btrim(p_body), '');
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if not exists(select 1 from channel_members where channel_id = p_channel_id and user_id = auth.uid()) then
+    raise exception 'Not a member of this channel';
+  end if;
+  if p_parent_id is not null and not exists(
+    select 1 from messages where id = p_parent_id and channel_id = p_channel_id and parent_id is null
+  ) then raise exception 'Invalid thread parent'; end if;
+  if v_body is not null and char_length(v_body) > 20000 then raise exception 'Message is too long'; end if;
+  insert into messages(channel_id, user_id, body, parent_id)
+  values(p_channel_id, auth.uid(), v_body, p_parent_id) returning id into v_id;
+  update channel_members set last_read_at = now() where channel_id = p_channel_id and user_id = auth.uid();
+  return v_id;
+end; $$;
+
+revoke all on function get_my_channel_ids() from public, anon;
+revoke all on function create_channel(text, text, text) from public, anon;
+revoke all on function create_dm_channel(uuid) from public, anon;
+revoke all on function send_message(uuid, text, uuid) from public, anon;
+revoke all on function edit_message(uuid, text) from public, anon;
+revoke all on function delete_message(uuid) from public, anon;
+revoke all on function toggle_reaction(uuid, text) from public, anon;
+grant execute on function get_my_channel_ids() to authenticated;
+grant execute on function create_channel(text, text, text) to authenticated;
+grant execute on function create_dm_channel(uuid) to authenticated;
+grant execute on function send_message(uuid, text, uuid) to authenticated;
+grant execute on function edit_message(uuid, text) to authenticated;
+grant execute on function delete_message(uuid) to authenticated;
+grant execute on function toggle_reaction(uuid, text) to authenticated;
+
+alter table attachments replica identity full;
+alter table idea_comments replica identity full;
+do $$
+begin
+  if not exists(select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'attachments') then
+    alter publication supabase_realtime add table attachments;
+  end if;
+  if not exists(select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'idea_comments') then
+    alter publication supabase_realtime add table idea_comments;
+  end if;
+end $$;
+
+-- The feature sections above install broad collaboration policies. Tighten
+-- only the identity-bearing inserts after those sections have completed.
+drop policy if exists "Authenticated users can insert project boards" on project_boards;
+create policy "Authenticated users can insert project boards" on project_boards for insert to authenticated with check (created_by = auth.uid());
+drop policy if exists "Authenticated users can insert project tasks" on project_tasks;
+create policy "Authenticated users can insert project tasks" on project_tasks for insert to authenticated with check (created_by = auth.uid());
+drop policy if exists "Authenticated users can insert project task comments" on project_task_comments;
+create policy "Authenticated users can insert project task comments" on project_task_comments for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "Authenticated users can insert ideas" on ideas;
+create policy "Authenticated users can insert ideas" on ideas for insert to authenticated with check (author_id = auth.uid());
+drop policy if exists "Authenticated users can insert idea comments" on idea_comments;
+create policy "Authenticated users can insert idea comments" on idea_comments for insert to authenticated with check (author_id = auth.uid());
+
+-- ============================================================
 -- 9. PROJECTS (TRELLO-LIKE KANBAN)
 -- ============================================================
 
@@ -624,3 +815,15 @@ begin
   end if;
 end $$;
 
+-- Final identity checks (the feature policies immediately above are otherwise
+-- intentionally team-wide for this internal collaboration app).
+drop policy if exists "Authenticated users can insert project boards" on project_boards;
+create policy "Authenticated users can insert project boards" on project_boards for insert to authenticated with check (created_by = auth.uid());
+drop policy if exists "Authenticated users can insert project tasks" on project_tasks;
+create policy "Authenticated users can insert project tasks" on project_tasks for insert to authenticated with check (created_by = auth.uid());
+drop policy if exists "Authenticated users can insert project task comments" on project_task_comments;
+create policy "Authenticated users can insert project task comments" on project_task_comments for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "Authenticated users can insert ideas" on ideas;
+create policy "Authenticated users can insert ideas" on ideas for insert to authenticated with check (author_id = auth.uid());
+drop policy if exists "Authenticated users can insert idea comments" on idea_comments;
+create policy "Authenticated users can insert idea comments" on idea_comments for insert to authenticated with check (author_id = auth.uid());

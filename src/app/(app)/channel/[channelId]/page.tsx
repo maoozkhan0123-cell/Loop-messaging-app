@@ -11,28 +11,19 @@ export default async function ChannelPage({ params }: PageProps) {
   const { channelId } = await params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Middleware has already validated this request's token.
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
 
   if (!user) redirect('/login')
 
   // Verify user is a member of this channel
-  const { data: membership } = await supabase
-    .from('channel_members')
-    .select('*')
-    .eq('channel_id', channelId)
-    .eq('user_id', user.id)
-    .single()
+  const [{ data: membership }, { data: channel }] = await Promise.all([
+    supabase.from('channel_members').select('*').eq('channel_id', channelId).eq('user_id', user.id).single(),
+    supabase.from('channels').select('*').eq('id', channelId).single(),
+  ])
 
   if (!membership) notFound()
-
-  // Get channel details
-  const { data: channel } = await supabase
-    .from('channels')
-    .select('*')
-    .eq('id', channelId)
-    .single()
 
   if (!channel) notFound()
   if (channel.archived_at) {

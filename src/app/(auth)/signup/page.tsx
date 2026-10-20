@@ -21,7 +21,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [infoMsg, setInfoMsg] = useState<string | null>(null)
 
-  // Step 1: Send OTP via Hostinger SMTP (info@stackdsol.com)
+  // Step 1: Send OTP via Hostinger SMTP (info@Bytechsol.com)
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -46,7 +46,7 @@ export default function SignupPage() {
         throw new Error((data.error as string) || 'Failed to send verification code')
       }
 
-      setInfoMsg(`Verification code sent to ${email} from info@stackdsol.com`)
+      setInfoMsg(`Verification code sent to ${email} from info@Bytechsol.com`)
       setStep('otp')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -99,14 +99,14 @@ export default function SignupPage() {
 
         {/* Logo */}
         <div className="flex justify-center mb-8">
-          <Image src="/huddle.svg" alt="Huddle" width={200} height={60} priority />
+          <Image src="/loop.svg" alt="Loop" width={200} height={60} priority />
         </div>
 
         <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-xs">
           {step === 'details' ? (
             <>
               <h1 className="text-lg font-bold text-[#000000] mb-1">Create your account</h1>
-              <p className="text-sm text-[#6B7280] mb-6">Join your team on Huddle</p>
+              <p className="text-sm text-[#6B7280] mb-6">Join your team on Loop</p>
 
               <form onSubmit={handleSendOTP} className="space-y-4">
                 {error && (
@@ -131,7 +131,7 @@ export default function SignupPage() {
                   <div className="relative">
                     <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@stackdsol.com" required
+                      placeholder="you@Bytechsol.com" required
                       className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
                   </div>
@@ -170,7 +170,7 @@ export default function SignupPage() {
 
               <h1 className="text-lg font-bold text-[#000000] mb-1">Enter Verification Code</h1>
               <p className="text-xs text-[#6B7280] mb-6">
-                We sent a 6-digit verification code from <strong>info@stackdsol.com</strong> to <strong>{email}</strong>.
+                We sent a 6-digit verification code from <strong>info@Bytechsol.com</strong> to <strong>{email}</strong>.
               </p>
 
               {infoMsg && (

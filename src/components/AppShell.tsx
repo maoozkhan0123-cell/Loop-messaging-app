@@ -10,6 +10,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { useChannels } from '@/hooks/useChannels'
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications'
 import { X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface MobileNavContextType {
   mobileMenuOpen: boolean
@@ -34,6 +35,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: myProfile } = useProfile()
   const { data: channels } = useChannels()
 
+  // Keep the directory status in sync with this browser session.
+  useEffect(() => {
+    if (!myProfile?.id) return
+    const supabase = createClient()
+    const setStatus = (status: 'online' | 'away' | 'offline') => {
+      void supabase.from('profiles').update({ status }).eq('id', myProfile.id)
+    }
+    const handleVisibility = () => setStatus(document.hidden ? 'away' : 'online')
+    const handlePageHide = () => setStatus('offline')
+    setStatus(document.hidden ? 'away' : 'online')
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('pagehide', handlePageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('pagehide', handlePageHide)
+      setStatus('offline')
+    }
+  }, [myProfile?.id])
+
   // Auto-close mobile navigation drawer on route change
   useEffect(() => {
     setMobileMenuOpen(false)
@@ -42,8 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Stable channel ID list — used by global notification subscription.
   const channelIds = useMemo(
     () => channels?.map((c) => c.id) ?? [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [channels?.map((c) => c.id).join(',')]
+    [channels]
   )
 
   useGlobalNotifications(myProfile?.id, channelIds)
@@ -140,4 +159,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </MobileNavContext.Provider>
   )
 }
-

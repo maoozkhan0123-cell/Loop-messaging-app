@@ -24,8 +24,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    const authHeader = req.headers.get('Authorization')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader?.replace('Bearer ', '') ?? ''
+    )
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const payload: NotificationPayload = await req.json()
     const { messageId, channelId, senderId, body } = payload
+
+    if (!messageId || !channelId || senderId !== user.id) {
+      return new Response(JSON.stringify({ error: 'Invalid notification payload' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const { data: sourceMessage } = await supabase
+      .from('messages').select('id').eq('id', messageId)
+      .eq('channel_id', channelId).eq('user_id', user.id).maybeSingle()
+    if (!sourceMessage) {
+      return new Response(JSON.stringify({ error: 'Message not found' }), {
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     // Get channel members who should receive notifications
     const { data: members } = await supabase

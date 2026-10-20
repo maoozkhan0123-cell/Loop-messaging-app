@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getOTP, deleteOTP } from '@/lib/otpStore'
+import { verifyOTP, deleteOTP } from '@/lib/otpStore'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -11,17 +11,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email and OTP code are required' }, { status: 400 })
     }
 
-    const record = getOTP(email)
-    if (!record) {
+    const verification = verifyOTP(String(email), String(code))
+    if (!verification.ok || !verification.record) {
       return NextResponse.json(
-        { error: 'Verification code has expired or is invalid. Please request a new code.' },
+        { error: verification.reason === 'locked' ? 'Too many incorrect attempts. Request a new code.' : 'Verification code is expired or incorrect.' },
         { status: 400 }
       )
     }
-
-    if (record.code !== code.trim()) {
-      return NextResponse.json({ error: 'Incorrect verification code. Please check your email.' }, { status: 400 })
-    }
+    const record = verification.record
 
     // 1. Create account via Supabase Admin API with email_confirm = true (bypasses Supabase default emails!)
     const admin = createAdminClient()

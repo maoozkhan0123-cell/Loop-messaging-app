@@ -7,7 +7,7 @@ import { formatMessageTime } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useRouter } from 'next/navigation'
-import type { Message } from '@/types/database'
+import type { SearchResult } from '@/hooks/useSearch'
 
 function highlightMatch(text: string, query: string): React.ReactNode {
   if (!query.trim()) return text
@@ -40,7 +40,8 @@ export function SearchOverlay() {
     return () => document.removeEventListener('keydown', down)
   }, [])
 
-  const navigateToMessage = (msg: Message & { channels: { id: string; name: string | null; type: string } }) => {
+  const navigateToMessage = (msg: SearchResult) => {
+    if (!msg.channels) return
     const isDM = msg.channels.type === 'dm' || msg.channels.type === 'group_dm'
     router.push(isDM ? `/dm/${msg.channels.id}` : `/channel/${msg.channels.id}`)
     setOpen(false)
@@ -98,6 +99,7 @@ export function SearchOverlay() {
                   <button
                     key={msg.id}
                     onClick={() => navigateToMessage(msg)}
+                    disabled={!msg.channels}
                     className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[#F9FAFB] text-left transition-colors border-b border-[#F3F4F6] last:border-0"
                   >
                     <Avatar
@@ -115,12 +117,12 @@ export function SearchOverlay() {
                           {formatMessageTime(msg.created_at)}
                         </span>
                         <span className="flex items-center gap-1 text-xs text-[#9CA3AF] ml-auto">
-                          {msg.channels.type === 'dm' ? (
+                          {msg.channels?.type === 'dm' ? (
                             <MessageSquare size={11} />
                           ) : (
                             <Hash size={11} />
                           )}
-                          {msg.channels.name ?? 'DM'}
+                          {msg.channels?.name ?? 'DM'}
                         </span>
                       </div>
                       <p className="text-sm text-[#374151] line-clamp-2 message-body">

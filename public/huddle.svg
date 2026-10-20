@@ -1,9 +1,0 @@
-<svg width="400" height="120" viewBox="0 0 400 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Icon Mark -->
-  <rect x="10" y="10" width="100" height="100" rx="24" fill="#000000"/>
-  <path d="M35 36C35 32.6863 37.6863 30 41 30H61C64.3137 30 67 32.6863 67 36V48C67 51.3137 64.3137 54 61 54H48L39 61V54C36.7909 54 35 52.2091 35 50V36Z" fill="#FFFFFF"/>
-  <path d="M53 58C53 54.6863 55.6863 52 59 52H79C82.3137 52 85 54.6863 85 58V70C85 73.3137 82.3137 76 79 76H77V83L68 76H59C55.6863 76 53 73.3137 53 70V58Z" fill="#FFFFFF" fill-opacity="0.75"/>
-  
-  <!-- Text: HUDDLE -->
-  <text x="135" y="78" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="900" font-size="44" letter-spacing="4" fill="#000000">HUDDLE</text>
-</svg>

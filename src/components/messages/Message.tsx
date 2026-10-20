@@ -5,6 +5,7 @@ import { formatMessageTime, formatShortTime, groupReactions, isImageMime, format
 import { Avatar } from '@/components/ui/Avatar'
 import { Pencil, Trash2, Paperclip, Download, Check, CheckCheck, ChevronRight, Plus, Play, Pause, Mic } from 'lucide-react'
 import type { Message as MessageType, Attachment } from '@/types/database'
+import { useSignedAttachmentUrl } from '@/hooks/useSignedAttachmentUrl'
 import { useEditMessage, useDeleteMessage } from '@/hooks/useMessages'
 import { useReactions } from '@/hooks/useReactions'
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
@@ -385,7 +386,11 @@ function ImageAttachment({ url, attachment }: { url: string; attachment: Attachm
 function AttachmentCard({ attachment }: { attachment: Attachment }) {
   const isImage = isImageMime(attachment.mime_type)
   const isAudio = attachment.mime_type?.startsWith('audio/')
-  const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/attachments/${attachment.object_key}`
+  const { data: url, isLoading } = useSignedAttachmentUrl(attachment.object_key)
+
+  if (isLoading || !url) {
+    return <div className="w-64 h-14 bg-[#F3F4F6] animate-pulse rounded-xl" />
+  }
 
   if (isImage) {
     return <ImageAttachment url={url} attachment={attachment} />

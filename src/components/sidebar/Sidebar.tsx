@@ -98,14 +98,14 @@ export function Sidebar() {
         style={{ height: 49, borderBottom: `1px solid rgba(255,255,255,0.1)` }}
       >
         <button type="button" className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity">
-          <span className="font-bold text-[15px] text-white truncate tracking-wide">Huddle Workspace</span>
+          <span className="font-bold text-[15px] text-white truncate tracking-wide">Loop Workspace</span>
           <ChevronDown size={14} className="text-white/60 flex-shrink-0" />
         </button>
         <div className="flex items-center gap-1">
-          <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="Settings">
+          <button type="button" onClick={() => router.push('/profile')} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="Profile settings">
             <Settings size={15} style={{ color: TEXT_MUTED }} />
           </button>
-          <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="New message">
+          <button type="button" onClick={() => router.push('/people')} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="New message">
             <SquarePen size={15} style={{ color: TEXT_MUTED }} />
           </button>
         </div>

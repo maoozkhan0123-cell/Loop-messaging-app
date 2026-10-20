@@ -89,7 +89,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
         style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, display: 'block', marginBottom: 14 }}
         className="hover:scale-105 transition-transform focus-visible:outline-none bg-black border border-[#27272A] shadow-md"
       >
-        <Image src="/huddle-logo.svg" alt="Huddle" width={44} height={44} priority style={{ objectFit: 'cover', display: 'block' }} />
+        <Image src="/loop-logo.svg" alt="Loop" width={44} height={44} priority style={{ objectFit: 'cover', display: 'block' }} />
       </button>
 
       {/* Nav items */}

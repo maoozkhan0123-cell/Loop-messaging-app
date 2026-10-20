@@ -241,7 +241,7 @@ function FilesTab({ channelId, currentUserId }: { channelId: string; currentUser
       <div className="flex flex-col gap-2">
         {files.map((file) => {
           const isImage = isImageMime(file.mime_type)
-          const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/attachments/${file.object_key}`
+          const url = file.signed_url ?? ''
           const isOwn = file.sender_id === currentUserId
           return (
             <div

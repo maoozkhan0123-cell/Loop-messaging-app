@@ -1,28 +1,13 @@
 import type { Metadata } from 'next'
-import { Inter, DM_Sans } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 import { Providers } from '@/components/Providers'
 import { Toaster } from '@/components/ui/Toaster'
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-})
-
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  variable: '--font-dm-sans',
-  display: 'swap',
-  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-})
-
 export const metadata: Metadata = {
-  title: 'Huddle — Team Communication & Collaboration',
+  title: 'Loop — Team Communication & Collaboration',
   description: 'Internal team workspace for messaging, projects, and ideas',
-  icons: { icon: '/huddle-logo.svg' },
+  icons: { icon: '/loop-logo.svg' },
 }
 
 export default function RootLayout({
@@ -31,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${dmSans.variable}`}>
+    <html lang="en">
       <body suppressHydrationWarning>
         <Providers>
           {children}

@@ -5,7 +5,7 @@ const transporter = nodemailer.createTransport({
   port: Number(process.env.SMTP_PORT) || 465,
   secure: true, // SSL
   auth: {
-    user: process.env.SMTP_USER || 'info@stackdsol.com',
+    user: process.env.SMTP_USER || 'info@Bytechsol.com',
     pass: process.env.SMTP_PASS || 'S@nghar123',
   },
   connectionTimeout: 10000,
@@ -18,9 +18,9 @@ const transporter = nodemailer.createTransport({
 
 export async function sendOTPEmail({ to, code, name }: { to: string; code: string; name?: string }) {
   const mailOptions = {
-    from: `"Huddle Team" <${process.env.SMTP_USER || 'info@stackdsol.com'}>`,
+    from: `"Loop Team" <${process.env.SMTP_USER || 'info@Bytechsol.com'}>`,
     to,
-    subject: `${code} is your Huddle verification code`,
+    subject: `${code} is your Loop verification code`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -36,17 +36,17 @@ export async function sendOTPEmail({ to, code, name }: { to: string; code: strin
       </head>
       <body>
         <div class="container">
-          <div class="logo">HUDDLE</div>
+          <div class="logo">LOOP</div>
           <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Verify your email address</h2>
           <p style="font-size: 14px; color: #52525B; line-height: 1.5; margin-bottom: 0;">
-            Hi ${name || 'there'}, welcome to Huddle! Enter the verification code below to complete your account registration:
+            Hi ${name || 'there'}, welcome to Loop! Enter the verification code below to complete your account registration:
           </p>
           <div class="code-box">${code}</div>
           <p style="font-size: 13px; color: #71717A;">
             This code expires in 10 minutes. If you did not request this email, please ignore it.
           </p>
           <div class="footer">
-            © ${new Date().getFullYear()} Huddle by StackdSol. All rights reserved.
+            © ${new Date().getFullYear()} Loop by Bytechsol. All rights reserved.
           </div>
         </div>
       </body>

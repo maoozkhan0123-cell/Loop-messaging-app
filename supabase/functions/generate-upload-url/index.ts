@@ -37,7 +37,7 @@ serve(async (req) => {
       })
     }
 
-    const { fileName, channelId, mimeType } = await req.json()
+    const { fileName, channelId, mimeType, fileSize } = await req.json()
     if (!fileName || !channelId) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
@@ -45,7 +45,23 @@ serve(async (req) => {
       })
     }
 
-    const objectKey = `${channelId}/${Date.now()}_${fileName}`
+    if (fileSize && Number(fileSize) > 25 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: 'Files must be 25 MB or smaller' }), {
+        status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const { data: membership } = await supabase
+      .from('channel_members').select('channel_id')
+      .eq('channel_id', channelId).eq('user_id', user.id).maybeSingle()
+    if (!membership) {
+      return new Response(JSON.stringify({ error: 'You are not a member of this channel' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const safeName = String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const objectKey = `${user.id}/${channelId}/${Date.now()}_${safeName}`
 
     const { data, error } = await supabase.storage
       .from('attachments')

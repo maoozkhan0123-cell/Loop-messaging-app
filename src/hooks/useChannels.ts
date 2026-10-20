@@ -16,7 +16,8 @@ export function useChannels() {
   return useQuery({
     queryKey: ['channels'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user) return []
 
       // ── Query 1: memberships + channel data in ONE join ──────────────────
@@ -88,7 +89,7 @@ export function useChannels() {
 
       // Fetch profiles for the actual DM other-member IDs
       const dmUserIds = [...new Set(channelToOtherUserId.values())]
-      let profileMap = new Map<string, Profile>()
+      const profileMap = new Map<string, Profile>()
       if (dmUserIds.length > 0) {
         const { data: dmProfiles } = await supabase
           .from('profiles')
@@ -172,13 +173,20 @@ export function useMarkRead() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (channelId: string) => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      await supabase
-        .from('channel_members')
-        .update({ last_read_at: new Date().toISOString() })
-        .eq('channel_id', channelId)
-        .eq('user_id', user.id)
+      const { error } = await supabase.rpc('mark_channel_read', { p_channel_id: channelId })
+      if (error?.code === 'PGRST202' || error?.code === '42883') {
+        const { data: { session } } = await supabase.auth.getSession()
+        const user = session?.user
+        if (!user) throw new Error('Your session has expired. Please sign in again.')
+        const fallback = await supabase
+          .from('channel_members')
+          .update({ last_read_at: new Date().toISOString() })
+          .eq('channel_id', channelId)
+          .eq('user_id', user.id)
+        if (fallback.error) throw new Error(fallback.error.message)
+      } else if (error) {
+        throw new Error(error.message)
+      }
     },
     onSuccess: (_, channelId) => {
       // Optimistically zero-out the unread count in cache — no full refetch

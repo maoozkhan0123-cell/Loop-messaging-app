@@ -10,7 +10,8 @@ export function useProfile() {
   return useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user) return null
 
       const { data, error } = await supabase
@@ -32,7 +33,8 @@ export function useUpdateProfile() {
 
   return useMutation({
     mutationFn: async (updates: Partial<Pick<Profile, 'display_name' | 'avatar_url' | 'job_title' | 'status'>>) => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user) throw new Error('Not authenticated')
 
       const { data, error } = await supabase

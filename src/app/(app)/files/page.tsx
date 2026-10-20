@@ -127,7 +127,7 @@ export default function FilesPage() {
             {filtered.map((file) => {
               const isImg = isImageMime(file.mime_type)
               const isOwn = file.sender_id === me?.id
-              const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/attachments/${file.object_key}`
+              const url = file.signed_url ?? ''
               const isDM = file.channel_type === 'dm' || file.channel_type === 'group_dm'
 
               return (

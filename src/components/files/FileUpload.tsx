@@ -35,6 +35,8 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
     setSubmitError(null)
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
       // Use the send_message RPC (same as MessageInput) — handles membership
       // check and last_read_at bump atomically via SECURITY DEFINER
       const { data: messageId, error: msgError } = await supabase.rpc('send_message', {
@@ -49,7 +51,7 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
       // Upload each file to Storage then insert attachment record
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const objectKey = `${channelId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+        const objectKey = `${user.id}/${channelId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
         setUploads((prev) =>
           prev.map((u, idx) => (idx === i ? { ...u, status: 'uploading' } : u))
@@ -70,7 +72,7 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
 
         const { error: attachError } = await supabase.from('attachments').insert({
           message_id: messageId,
-          uploader_id: (await supabase.auth.getUser()).data.user?.id,
+          uploader_id: user.id,
           object_key: objectKey,
           file_name: file.name,
           mime_type: file.type || null,
