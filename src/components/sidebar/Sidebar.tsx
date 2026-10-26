@@ -15,12 +15,10 @@ import type { Profile } from '@/types/database'
 
 const TEXT_DEFAULT = 'rgba(255,255,255,0.85)'
 const TEXT_MUTED = 'rgba(255,255,255,0.50)'
-const BORDER = 'rgba(255,255,255,0.07)'
 
 export function Sidebar() {
   const router = useRouter()
   const pathname = usePathname()
-  const { closeMobileMenu } = useMobileNav()
 
   const { data: channels, isLoading } = useChannels()
   const { data: allProfiles } = useAllProfiles()
@@ -35,8 +33,8 @@ export function Sidebar() {
   const [startingDM, setStartingDM] = useState<string | null>(null)
   const [sidebarSearch, setSidebarSearch] = useState('')
 
-  const publicChannels = channels?.filter((c) => c.type === 'public' || c.type === 'private') ?? []
-  const dmChannels = channels?.filter((c) => c.type === 'dm' || c.type === 'group_dm') ?? []
+  const publicChannels = useMemo(() => channels?.filter((c) => c.type === 'public' || c.type === 'private') ?? [], [channels])
+  const dmChannels = useMemo(() => channels?.filter((c) => c.type === 'dm' || c.type === 'group_dm') ?? [], [channels])
   const activeId = pathname.match(/\/(channel|dm)\/([^/]+)/)?.[2]
 
   // Existing DMs by other_member id
@@ -90,15 +88,15 @@ export function Sidebar() {
   }
 
   return (
-    <div className="flex flex-col h-full border-r border-[#27272A]" style={{ background: '#09090B', width: 260 }}>
+    <div className="flex flex-col h-full border-r border-white/10" style={{ background: 'linear-gradient(180deg, #202B75 0%, #253485 45%, #182365 100%)', width: 260 }}>
 
       {/* ── Workspace header ── */}
       <div
         className="flex items-center justify-between px-4 flex-shrink-0"
         style={{ height: 49, borderBottom: `1px solid rgba(255,255,255,0.1)` }}
       >
-        <button type="button" className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity">
-          <span className="font-bold text-[15px] text-white truncate tracking-wide">Loop Workspace</span>
+        <button type="button" onClick={() => router.push('/dashboard')} className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity">
+          <span className="font-bold text-[15px] text-white truncate tracking-wide">BySync Workspace</span>
           <ChevronDown size={14} className="text-white/60 flex-shrink-0" />
         </button>
         <div className="flex items-center gap-1">
@@ -112,15 +110,16 @@ export function Sidebar() {
       </div>
 
       {/* ── Scrollable body ── */}
-      <div className="flex-1 overflow-y-auto sidebar-scroll" style={{ scrollbarWidth: 'thin' }}>
+      <div className="flex-1 overflow-y-auto sidebar-scroll">
 
         {/* ── Unified search bar — above channels with gap ── */}
         <div className="px-3 pt-3 pb-4">
           <div
             className="flex items-center gap-2 h-8 px-3 rounded-md transition-all"
             style={{
-              background: 'rgba(255,255,255,0.09)',
-              border: `1px solid ${sidebarSearch ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.13)'}`,
+              background: 'rgba(255,255,255,0.10)',
+              border: `1px solid ${sidebarSearch ? 'rgba(39,170,225,0.85)' : 'rgba(255,255,255,0.16)'}`,
+              boxShadow: sidebarSearch ? '0 0 0 3px rgba(40,158,216,0.14)' : 'none',
             }}
           >
             <Search size={12} style={{ color: TEXT_MUTED, flexShrink: 0 }} />
@@ -180,7 +179,7 @@ export function Sidebar() {
                       disabled={startingDM === user.id}
                       className={cn(
                         'flex items-center gap-2 w-[calc(100%-8px)] mx-1 px-3 h-8 text-sm transition-colors text-left rounded',
-                        isActive ? 'bg-white/15' : 'hover:bg-white/08'
+                        isActive ? 'bg-[#289ED8]/35' : 'hover:bg-white/10'
                       )}
                     >
                       <Avatar src={user.avatar_url} name={user.display_name} size={20} status={user.status} />
@@ -224,7 +223,7 @@ export function Sidebar() {
                           {c.name}
                         </span>
                         {hasUnread && !isActive && (
-                          <span className="ml-auto flex-shrink-0 h-4 min-w-[16px] px-1 rounded-full text-[10px] font-bold text-white text-center" style={{ background: '#3589FA' }}>
+                          <span className="ml-auto flex-shrink-0 h-4 min-w-[16px] px-1 rounded-full text-[10px] font-bold text-white text-center" style={{ background: '#27AAE1' }}>
                             {(c.unread_count ?? 0) > 99 ? '99+' : c.unread_count}
                           </span>
                         )}
@@ -244,7 +243,7 @@ export function Sidebar() {
                     onBlur={() => { if (!newChannelName.trim()) setShowNewChannel(false) }}
                     placeholder="channel-name"
                     className="w-full h-7 px-2 text-xs rounded text-white focus:outline-none"
-                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #3589FA' }}
+                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #27AAE1' }}
                   />
                 </div>
               ) : (
@@ -274,7 +273,7 @@ export function Sidebar() {
                       disabled={startingDM === user.id}
                       className={cn(
                         'flex items-center gap-2 w-[calc(100%-8px)] mx-1 px-3 h-8 text-sm transition-colors text-left rounded',
-                        isActive ? 'bg-white/15' : 'hover:bg-white/08'
+                        isActive ? 'bg-[#289ED8]/35' : 'hover:bg-white/10'
                       )}
                     >
                       <div className="flex-shrink-0">
@@ -367,7 +366,7 @@ function NavLink({ href, isActive, children }: { href: string; isActive: boolean
       onClick={closeMobileMenu}
       className={cn(
         'flex items-center gap-2 h-8 px-3 mx-1 text-[13px] rounded transition-colors',
-        isActive ? 'bg-white/15 text-white font-semibold' : 'hover:bg-white/08 font-normal'
+        isActive ? 'bg-[#289ED8]/35 text-white font-semibold shadow-[inset_3px_0_0_#27AAE1]' : 'hover:bg-white/10 font-normal'
       )}
       style={!isActive ? { color: TEXT_DEFAULT } : undefined}
     >
@@ -381,7 +380,7 @@ function AddRow({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 h-8 px-3 mx-1 w-[calc(100%-8px)] text-[13px] rounded hover:bg-white/08 transition-colors"
+      className="flex items-center gap-2 h-8 px-3 mx-1 w-[calc(100%-8px)] text-[13px] rounded hover:bg-white/10 transition-colors"
       style={{ color: TEXT_MUTED }}
     >
       <Plus size={13} className="flex-shrink-0" />

@@ -49,9 +49,9 @@ export function useSearch(query: string) {
       const { data: profiles } = uids.length
         ? await supabase.from('profiles').select('*').in('id', uids)
         : { data: [] }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const pm = new Map((profiles ?? []).map((p: any) => [p.id as string, p]))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       return msgs.map((m) => ({
         ...m,
         channels: m.channels ?? null,

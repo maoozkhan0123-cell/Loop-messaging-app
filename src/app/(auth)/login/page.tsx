@@ -5,10 +5,12 @@ export const dynamic = 'force-dynamic'
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
+  const router = useRouter()
   const supabase = createClient()
 
   const [email, setEmail] = useState('')
@@ -18,6 +20,8 @@ export default function LoginPage() {
   const [magicLoading, setMagicLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [magicSent, setMagicSent] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
 
   const handleEmailContinue = (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,7 +39,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
     setLoading(false)
     if (error) setError(error.message)
-    else window.location.href = '/'
+    else router.replace('/')
   }
 
   const handleMagicLink = async () => {
@@ -49,6 +53,17 @@ export default function LoginPage() {
     setMagicLoading(false)
     if (error) setError(error.message)
     else setMagicSent(true)
+  }
+
+  const handleForgotPassword = async () => {
+    setError(null)
+    setResetLoading(true)
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: `${window.location.origin}/set-password`,
+    })
+    setResetLoading(false)
+    if (resetError) setError(resetError.message)
+    else setResetSent(true)
   }
 
   if (magicSent) {
@@ -146,7 +161,7 @@ export default function LoginPage() {
             Back
           </button>
 
-          <h1 className="text-[26px] font-black text-[#000000] mb-1">Sign in to Loop</h1>
+          <h1 className="text-[26px] font-black text-[#000000] mb-1">Sign in to BySync</h1>
           <p className="text-[14px] text-[#616061] mb-6">
             Signing in as <strong className="text-[#000000]">{email}</strong>
           </p>
@@ -159,7 +174,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-3">
             <div>
-              <label className="block text-[13px] font-semibold text-[#000000] mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5"><label className="block text-[13px] font-semibold text-[#000000]">Password</label><button type="button" onClick={handleForgotPassword} disabled={resetLoading} className="text-xs font-semibold text-[#1264A3] hover:underline disabled:opacity-60">{resetLoading ? 'Sending…' : 'Forgot password?'}</button></div>
               <input
                 type="password"
                 value={password}
@@ -180,6 +195,8 @@ export default function LoginPage() {
               Sign in
             </button>
           </form>
+
+          {resetSent && <div className="mt-3 text-[13px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">Password reset link sent. Please check your email.</div>}
 
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-[#DDDDDD]" />
@@ -213,9 +230,9 @@ function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-white">
       <div className="w-full max-w-[400px]">
-        {/* Loop logo */}
+        {/* BySync logo */}
         <div className="flex justify-center mb-8">
-          <Image src="/loop.svg" alt="Loop" width={220} height={66} priority />
+          <Image src="/bysync.svg" alt="BySync" width={220} height={71} priority />
         </div>
 
         {children}

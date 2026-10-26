@@ -37,7 +37,7 @@ serve(async (req) => {
       })
     }
 
-    const { fileName, channelId, mimeType, fileSize } = await req.json()
+    const { fileName, channelId, fileSize } = await req.json()
     if (!fileName || !channelId) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,

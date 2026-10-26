@@ -19,6 +19,7 @@ export function useProjects(selectedBoardId?: string) {
   // 1. Fetch all boards
   const boardsQuery = useQuery({
     queryKey: ['project_boards'],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('project_boards')
@@ -37,6 +38,7 @@ export function useProjects(selectedBoardId?: string) {
   const columnsQuery = useQuery({
     queryKey: ['project_columns', activeBoardId],
     enabled: !!activeBoardId,
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('project_columns')
@@ -53,6 +55,7 @@ export function useProjects(selectedBoardId?: string) {
   const tasksQuery = useQuery({
     queryKey: ['project_tasks', activeBoardId],
     enabled: !!activeBoardId,
+    staleTime: 30_000,
     queryFn: async () => {
       const { data: tasksData, error: tasksErr } = await supabase
         .from('project_tasks')
@@ -159,6 +162,7 @@ export function useProjects(selectedBoardId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project_boards'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
@@ -179,6 +183,7 @@ export function useProjects(selectedBoardId?: string) {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['project_columns', vars.boardId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
@@ -226,6 +231,7 @@ export function useProjects(selectedBoardId?: string) {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['project_tasks', vars.boardId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
@@ -269,6 +275,7 @@ export function useProjects(selectedBoardId?: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['project_tasks', activeBoardId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
@@ -279,6 +286,7 @@ export function useProjects(selectedBoardId?: string) {
       title,
       description,
       priority,
+      columnId,
       assigneeId,
       dueDate
     }: {
@@ -286,6 +294,7 @@ export function useProjects(selectedBoardId?: string) {
       title?: string
       description?: string
       priority?: TaskPriority
+      columnId?: string
       assigneeId?: string | null
       dueDate?: string | null
     }) => {
@@ -293,6 +302,7 @@ export function useProjects(selectedBoardId?: string) {
       if (title !== undefined) updates.title = title
       if (description !== undefined) updates.description = description
       if (priority !== undefined) updates.priority = priority
+      if (columnId !== undefined) updates.column_id = columnId
       if (assigneeId !== undefined) updates.assignee_id = assigneeId
       if (dueDate !== undefined) updates.due_date = dueDate
 
@@ -308,6 +318,7 @@ export function useProjects(selectedBoardId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project_tasks', activeBoardId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
@@ -319,6 +330,7 @@ export function useProjects(selectedBoardId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project_tasks', activeBoardId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
@@ -365,6 +377,7 @@ export function useTaskComments(taskId?: string) {
   return useQuery({
     queryKey: ['project_task_comments', taskId],
     enabled: !!taskId,
+    staleTime: 30_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('project_task_comments')

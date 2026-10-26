@@ -1,0 +1,6 @@
+desktop-dist/
+desktop/assets/
+desktop/README.md
+desktop/package.json
+desktop/main.cjs
+desktop/preload.cjs

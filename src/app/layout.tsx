@@ -5,9 +5,10 @@ import { Providers } from '@/components/Providers'
 import { Toaster } from '@/components/ui/Toaster'
 
 export const metadata: Metadata = {
-  title: 'Loop — Team Communication & Collaboration',
-  description: 'Internal team workspace for messaging, projects, and ideas',
-  icons: { icon: '/loop-logo.svg' },
+  title: 'BySync — Team Communication & Work Management',
+  description: 'One workspace for team messaging, projects, files, tasks, and ideas',
+  applicationName: 'BySync',
+  icons: { icon: '/bysync-logo.svg' },
 }
 
 export default function RootLayout({
@@ -19,8 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body suppressHydrationWarning>
         <Providers>
-          {children}
-          <Toaster />
+          <Toaster>{children}</Toaster>
         </Providers>
         <Script src="https://cdn.lordicon.com/lordicon.js" strategy="lazyOnload" />
       </body>

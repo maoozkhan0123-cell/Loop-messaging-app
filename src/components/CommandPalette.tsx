@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Command } from 'cmdk'
-import { Hash, Lock, MessageSquare, Search, X } from 'lucide-react'
+import { Hash, Lock, Search, X } from 'lucide-react'
 import { useChannels } from '@/hooks/useChannels'
 import type { ChannelWithMember } from '@/types/database'
 import { Avatar } from '@/components/ui/Avatar'

@@ -8,13 +8,16 @@ export async function updateSession(request: NextRequest) {
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
   const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder'
 
   const isApiRoute = request.nextUrl.pathname.startsWith('/api')
-  const isAuthPage =
+  const isSignInPage =
     request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/signup')
+  const isPublicAuthPage =
+    isSignInPage || request.nextUrl.pathname.startsWith('/set-password')
 
   // Allow all /api routes to bypass auth page redirects
   if (isApiRoute) {
@@ -49,13 +52,13 @@ export async function updateSession(request: NextRequest) {
     // Invalid/expired refresh token — treat as unauthenticated
   }
 
-  if (!user && !isAuthPage) {
+  if (!user && !isPublicAuthPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && isAuthPage) {
+  if (user && isSignInPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

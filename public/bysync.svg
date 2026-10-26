@@ -1,0 +1,19 @@
+<svg width="560" height="180" viewBox="0 0 560 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mark" x1="20" y1="15" x2="150" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2B3990"/>
+      <stop offset="0.58" stop-color="#5141BF"/>
+      <stop offset="1" stop-color="#289ED8"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="93" y1="52" x2="145" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#36D7AE"/>
+      <stop offset="1" stop-color="#289ED8"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="160" height="160" rx="44" fill="url(#mark)"/>
+  <path d="M43 43H89C109 43 121 54 121 71C121 82 116 90 107 95C119 100 126 109 126 122C126 140 112 151 91 151H43V43ZM68 64V85H87C94 85 98 81 98 75C98 68 94 64 87 64H68ZM68 106V130H90C98 130 102 126 102 118C102 110 98 106 90 106H68Z" fill="white"/>
+  <path d="M116 52C134 52 146 62 151 77L131 83C129 76 124 73 116 73C109 73 105 76 105 81C105 86 111 88 121 91C138 96 153 102 153 121C153 140 138 152 116 152C96 152 81 143 75 125L96 118C99 128 106 132 116 132C125 132 130 128 130 123C130 117 123 115 112 112C96 107 82 101 82 82C82 64 96 52 116 52Z" fill="url(#accent)"/>
+  <text x="195" y="112" fill="#17223D" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="72" font-weight="750" letter-spacing="-3">By</text>
+  <text x="287" y="112" fill="#2B3990" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="72" font-weight="750" letter-spacing="-3">Sync</text>
+  <text x="199" y="142" fill="#708198" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14" font-weight="600" letter-spacing="3">ONE WORKSPACE. EVERY TEAM.</text>
+</svg>

@@ -98,9 +98,9 @@ export const Message = memo(function Message({
         <div className="flex items-start gap-2.5">
           {/* Avatar column */}
           {showHeader ? (
-            <button type="button" className="shrink-0 mt-0.5">
+            <div className="shrink-0 mt-0.5">
               <Avatar src={profile?.avatar_url} name={profile?.display_name ?? 'Unknown'} size={36} />
-            </button>
+            </div>
           ) : (
             <div className="w-9 shrink-0 flex items-center justify-center">
               {hovered && !isEditing && (
@@ -115,14 +115,14 @@ export const Message = memo(function Message({
           <div className="flex-1 min-w-0">
             {showHeader && (
               <div className="flex items-baseline gap-2 mb-0.5">
-                <button type="button" className="text-sm font-bold text-[#111827] hover:underline leading-snug">
+                <span className="text-sm font-bold text-[#111827] leading-snug">
                   {profile?.display_name ?? 'Unknown'}
-                </button>
+                </span>
                 <Tooltip.Root>
                   <Tooltip.Trigger asChild>
-                    <button className="text-xs text-[#9CA3AF] hover:underline leading-snug">
+                    <span tabIndex={0} className="text-xs text-[#9CA3AF] cursor-help leading-snug">
                       {formatShortTime(message.created_at)}
-                    </button>
+                    </span>
                   </Tooltip.Trigger>
                   <Tooltip.Portal>
                     <Tooltip.Content side="top" className="px-2 py-1 text-xs bg-[#1A1D21] text-white rounded shadow z-50" sideOffset={4}>
@@ -366,6 +366,8 @@ function ImageAttachment({ url, attachment }: { url: string; attachment: Attachm
       {!loaded && (
         <div className="w-64 h-40 bg-[#F3F4F6] animate-pulse rounded-xl" />
       )}
+      {/* Attachment URLs are signed and short-lived. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
         alt={attachment.file_name}

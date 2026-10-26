@@ -1,8 +1,7 @@
 ﻿// Loop Service Worker — handles Web Push notifications
-const CACHE_NAME = 'loop-v1';
-const OFFLINE_URL = '/offline';
+const CACHE_NAME = 'bysync-v1';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -32,7 +31,7 @@ self.addEventListener('push', (event) => {
     body: payload.body || '',
     icon: '/icon-192.png',
     badge: '/badge-72.png',
-    tag: payload.tag || 'loop-notification',
+    tag: payload.tag || 'bysync-notification',
     data: {
       url: payload.url || '/',
     },
@@ -43,7 +42,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'Loop', options)
+    self.registration.showNotification(payload.title || 'BySync', options)
   );
 });
 

@@ -16,6 +16,11 @@ import { useMarkRead } from '@/hooks/useChannels'
 import { useChannelFiles } from '@/hooks/useChannelFiles'
 import { cn, formatFileSize, isImageMime } from '@/lib/utils'
 import { format } from 'date-fns'
+import { useRouter } from 'next/navigation'
+import { useToast } from '@/components/ui/Toaster'
+import { useNotifications } from '@/hooks/useNotifications'
+import { Avatar } from '@/components/ui/Avatar'
+import type { Profile } from '@/types/database'
 
 interface MessagePaneProps {
   channel: ChannelWithMember
@@ -29,11 +34,15 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('messages')
   const [chatSearchOpen, setChatSearchOpen] = useState(false)
   const [chatSearchQuery, setChatSearchQuery] = useState('')
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const router = useRouter()
+  const { toast } = useToast()
+  const notifications = useNotifications()
   const { typingUsers } = useTypingIndicator(channel.id)
   const markRead = useMarkRead()
 
   const isDM = channel.type === 'dm' || channel.type === 'group_dm'
-  const other = channel.other_member as { display_name: string } | undefined
+  const other = channel.other_member as Profile | undefined
   const channelName = isDM ? (other?.display_name ?? 'Direct Message') : (channel.name ?? 'Channel')
   const Icon = channel.type === 'private' ? Lock : isDM ? MessageSquare : Hash
 
@@ -66,6 +75,7 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
           <div className="flex items-center justify-between px-2 sm:px-4 h-[49px]">
             <button
               type="button"
+              onClick={() => setDetailsOpen(true)}
               className="flex items-center gap-1.5 font-bold text-[14px] sm:text-[15px] text-[#1D1C1D] hover:bg-[#F8F8F8] px-1.5 sm:px-2 py-1 rounded transition-colors max-w-[170px] sm:max-w-none"
             >
               {isDM ? (
@@ -82,8 +92,8 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
             <div className="flex items-center gap-0.5">
               {isDM && (
                 <>
-                  <HeaderIconBtn label="Call" icon={<Headphones size={16} />} className="hidden sm:flex" />
-                  <HeaderIconBtn label="Notifications" icon={<Bell size={16} />} className="hidden sm:flex" />
+                  <HeaderIconBtn label="Call" icon={<Headphones size={16} />} className="hidden sm:flex" onClick={() => toast({ title: 'Calls are not configured', description: 'Connect your company meeting provider before using calls.' })} />
+                  <HeaderIconBtn label="Notifications" icon={<Bell size={16} />} className="hidden sm:flex" active={notifications.enabled} onClick={notifications.toggle} />
                 </>
               )}
               {/* In-chat search toggle */}
@@ -93,18 +103,18 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
                 onClick={handleSearchToggle}
                 active={chatSearchOpen}
               />
-              <HeaderIconBtn label="More" icon={<MoreHorizontal size={16} />} />
+              <HeaderIconBtn label="More" icon={<MoreHorizontal size={16} />} onClick={() => setDetailsOpen(true)} active={detailsOpen} />
               {isDM && (
                 <HeaderIconBtn label="Close" icon={<X size={16} />} onClick={() => window.history.back()} />
               )}
               {!isDM && (
                 <>
                   <div className="w-px h-4 bg-[#E5E7EB] mx-1 hidden sm:block" />
-                  <button type="button" className="hidden sm:flex items-center gap-1.5 h-7 px-2 rounded text-sm text-[#6B7280] hover:bg-[#F3F4F6] transition-colors">
+                  <button type="button" onClick={() => router.push('/people')} className="hidden sm:flex items-center gap-1.5 h-7 px-2 rounded text-sm text-[#6B7280] hover:bg-[#F3F4F6] transition-colors">
                     <Users size={14} />
                     <span className="text-sm">Members</span>
                   </button>
-                  <HeaderIconBtn label="Details" icon={<Info size={16} />} className="hidden sm:flex" />
+                  <HeaderIconBtn label="Details" icon={<Info size={16} />} className="hidden sm:flex" onClick={() => setDetailsOpen(true)} active={detailsOpen} />
                 </>
               )}
             </div>
@@ -114,7 +124,7 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
           <div className="flex items-center px-2 sm:px-4 gap-0 overflow-x-auto" style={{ borderTop: '1px solid #F3F4F6' }}>
             <TabButton label="Messages" isActive={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<MessageSquare size={13} />} />
             <TabButton label="Files" isActive={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={<Paperclip size={13} />} />
-            <button type="button" className="flex items-center justify-center w-7 h-7 ml-1 rounded text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-colors flex-shrink-0">
+            <button type="button" title="Conversation details" onClick={() => setDetailsOpen(true)} className="flex items-center justify-center w-7 h-7 ml-1 rounded text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-colors flex-shrink-0">
               <Plus size={14} />
             </button>
           </div>
@@ -173,7 +183,7 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
               )}
             </div>
 
-            {isDM && <OfflineBanner name={channelName} />}
+            {isDM && <OfflineBanner name={channelName} onNotify={() => toast({ title: 'Notification preference saved', description: `${channelName} will receive the message normally.` })} />}
 
             <MessageInput
               channelId={channel.id}
@@ -202,6 +212,26 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
               onClose={() => setThreadMessage(null)}
             />
           </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {detailsOpen && (
+          <motion.aside initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: '100%' }} transition={{ duration: 0.18 }} className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[320px] h-full bg-white border-l border-[#E5E7EB] flex-shrink-0">
+            <div className="h-12 px-4 flex items-center justify-between border-b border-[#E5E7EB]"><h2 className="font-bold text-[#111827]">Conversation details</h2><button type="button" aria-label="Close details" onClick={() => setDetailsOpen(false)} className="p-2 rounded-lg text-[#6B7280] hover:bg-[#F3F4F6]"><X size={16} /></button></div>
+            <div className="p-5 overflow-y-auto">
+              <div className="text-center pb-5 border-b border-[#E5E7EB]">
+                {isDM && other ? <div className="flex justify-center mb-3"><Avatar src={other.avatar_url} name={other.display_name} size={64} status={other.status} /></div> : <div className="mx-auto mb-3 w-14 h-14 rounded-2xl bg-[#EFF6FF] flex items-center justify-center text-[#3589FA]"><Icon size={25} /></div>}
+                <h3 className="text-lg font-bold text-[#111827]">{isDM ? channelName : `#${channelName}`}</h3>
+                <p className="text-xs text-[#6B7280] mt-1">{isDM ? (other?.email || other?.job_title || 'Direct conversation') : (channel.topic || 'Team conversation')}</p>
+              </div>
+              <div className="py-4 space-y-2">
+                <button type="button" onClick={() => { setActiveTab('messages'); setDetailsOpen(false) }} className="w-full h-10 px-3 rounded-lg flex items-center gap-3 text-sm text-[#374151] hover:bg-[#F3F4F6]"><MessageSquare size={16} />View messages</button>
+                <button type="button" onClick={() => { setActiveTab('files'); setDetailsOpen(false) }} className="w-full h-10 px-3 rounded-lg flex items-center gap-3 text-sm text-[#374151] hover:bg-[#F3F4F6]"><Paperclip size={16} />Shared files</button>
+                <button type="button" onClick={() => router.push('/people')} className="w-full h-10 px-3 rounded-lg flex items-center gap-3 text-sm text-[#374151] hover:bg-[#F3F4F6]"><Users size={16} />Team directory</button>
+              </div>
+              <div className="rounded-xl bg-[#F8FAFC] border border-[#E5E7EB] p-3 text-xs text-[#64748B]"><p className="font-semibold text-[#374151] mb-1">Created</p><p>{format(new Date(channel.created_at), 'MMMM d, yyyy')}</p></div>
+            </div>
+          </motion.aside>
         )}
       </AnimatePresence>
     </div>
@@ -250,6 +280,7 @@ function FilesTab({ channelId, currentUserId }: { channelId: string; currentUser
             >
               {isImage ? (
                 <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt={file.file_name} className="w-full h-full object-cover" />
                 </div>
               ) : (
@@ -312,7 +343,7 @@ function TabButton({ label, isActive, onClick, icon }: { label: string; isActive
   )
 }
 
-function OfflineBanner({ name }: { name: string }) {
+function OfflineBanner({ onNotify }: { name: string; onNotify: () => void }) {
   const [dismissed, setDismissed] = useState(false)
   if (dismissed) return null
   return (
@@ -320,7 +351,7 @@ function OfflineBanner({ name }: { name: string }) {
       <Bell size={13} className="shrink-0 text-[#3589FA]" />
       <span>
         They will see your messages when they get back.{' '}
-        <button type="button" className="text-[#3589FA] font-semibold hover:underline">Notify anyway?</button>
+        <button type="button" onClick={onNotify} className="text-[#3589FA] font-semibold hover:underline">Notify anyway?</button>
       </span>
       <button type="button" onClick={() => setDismissed(true)} className="ml-auto text-[#9CA3AF] hover:text-[#6B7280]"><X size={13} /></button>
     </div>

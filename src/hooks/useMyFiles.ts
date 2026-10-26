@@ -10,6 +10,7 @@ export type MyFile = Attachment & {
   channel_id: string | null
   channel_name: string | null
   channel_type: string | null
+  uploader_name: string | null
   signed_url: string | null
 }
 
@@ -28,7 +29,8 @@ export function useMyFiles() {
             channel_id,
             user_id,
             created_at,
-            channels(name, type)
+            channels(name, type),
+            profiles!messages_user_id_fkey(display_name)
           )
         `)
         .order('created_at', { ascending: false })
@@ -37,13 +39,14 @@ export function useMyFiles() {
       if (error) throw new Error(error.message)
 
       const rows = (data ?? []) as Array<Attachment & {
-        messages?: { user_id: string | null; created_at: string; channel_id: string; channels?: { name: string | null; type: string } | null }
+        messages?: { user_id: string | null; created_at: string; channel_id: string; channels?: { name: string | null; type: string } | null; profiles?: { display_name: string } | null }
       }>
-      const { data: signed } = rows.length
+      const { data: signed, error: signedError } = rows.length
         ? await supabase.storage.from('attachments').createSignedUrls(rows.map((row) => row.object_key), 3600)
-        : { data: [] }
+        : { data: [], error: null }
+      if (signedError) throw new Error(`Files were found, but secure links could not be created: ${signedError.message}`)
       const urlMap = new Map((signed ?? []).map((item: { path: string; signedUrl: string }) => [item.path, item.signedUrl]))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       return rows.map((row) => ({
         ...row,
         sender_id: row.messages?.user_id ?? null,
@@ -51,6 +54,7 @@ export function useMyFiles() {
         channel_id: row.messages?.channel_id ?? null,
         channel_name: row.messages?.channels?.name ?? null,
         channel_type: row.messages?.channels?.type ?? null,
+        uploader_name: row.messages?.profiles?.display_name ?? null,
         signed_url: urlMap.get(row.object_key) ?? null,
         messages: undefined,
       })) as MyFile[]

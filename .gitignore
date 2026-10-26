@@ -8,6 +8,7 @@ node_modules/
 /out/
 /build
 /dist
+/desktop-dist
 
 # Environment — NEVER commit these
 .env
@@ -51,3 +52,6 @@ yarn-error.log*
 *.key
 *.cert
 secrets/
+
+.vercel
+.env*

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Kanban,
   Plus,
@@ -13,10 +14,6 @@ import {
   Trash2,
   X,
   User,
-  Clock,
-  CheckSquare,
-  AlertCircle,
-  MoreVertical
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { useProjects, useTaskComments } from '@/hooks/useProjects'
@@ -35,6 +32,7 @@ const PRIORITY_CONFIG: Record<
 }
 
 export default function ProjectsPage() {
+  const router = useRouter()
   const [selectedBoardId, setSelectedBoardId] = useState<string | undefined>(undefined)
   const {
     boards,
@@ -71,8 +69,15 @@ export default function ProjectsPage() {
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>('')
 
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
+
+  useEffect(() => {
+    const boardId = new URLSearchParams(window.location.search).get('board')
+    if (boardId && boardId !== selectedBoardId) setSelectedBoardId(boardId)
+  }, [selectedBoardId])
 
   // Filter tasks by search & priority
   const filteredTasks = tasks.filter((t) => {
@@ -123,6 +128,29 @@ export default function ProjectsPage() {
   }
 
   const currentBoard = boards.find((b) => b.id === (activeBoardId || selectedBoardId))
+
+  useEffect(() => {
+    const taskId = new URLSearchParams(window.location.search).get('task')
+    if (!taskId || selectedTask) return
+    const task = tasks.find((item) => item.id === taskId)
+    if (task) setSelectedTask(task)
+  }, [tasks, selectedTask])
+
+  const handleCloseTask = () => {
+    setSelectedTask(null)
+    const params = new URLSearchParams(window.location.search)
+    params.delete('task')
+    const query = params.toString()
+    router.replace(query ? `/projects?${query}` : '/projects', { scroll: false })
+  }
+
+  const handleDrop = async (columnId: string) => {
+    if (!draggedTaskId) return
+    const position = tasks.filter((task) => task.column_id === columnId).length
+    await moveTask({ taskId: draggedTaskId, targetColumnId: columnId, newPosition: position })
+    setDraggedTaskId(null)
+    setDragOverColumnId(null)
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
@@ -242,7 +270,10 @@ export default function ProjectsPage() {
               return (
                 <div
                   key={col.id}
-                  className="w-72 sm:w-80 flex-shrink-0 flex flex-col max-h-full bg-[#EBEEF2] rounded-2xl border border-[#E2E8F0] shadow-xs"
+                  onDragOver={(event) => { event.preventDefault(); setDragOverColumnId(col.id) }}
+                  onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOverColumnId(null) }}
+                  onDrop={(event) => { event.preventDefault(); void handleDrop(col.id) }}
+                  className={`w-72 sm:w-80 flex-shrink-0 flex flex-col max-h-full rounded-2xl border shadow-xs transition-all ${dragOverColumnId === col.id ? 'bg-[#EAF7FC] border-[#289ED8] ring-2 ring-[#289ED8]/15' : 'bg-[#F2F7FB] border-[#DDE8F2]'}`}
                 >
                   {/* Column Header */}
                   <div className="p-3.5 flex items-center justify-between border-b border-[#E2E8F0] bg-white/60 rounded-t-2xl">
@@ -279,8 +310,11 @@ export default function ProjectsPage() {
                         return (
                           <div
                             key={task.id}
+                            draggable
+                            onDragStart={(event) => { setDraggedTaskId(task.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', task.id) }}
+                            onDragEnd={() => { setDraggedTaskId(null); setDragOverColumnId(null) }}
                             onClick={() => setSelectedTask(task)}
-                            className="group bg-white p-4 rounded-xl border border-[#E2E8F0] shadow-xs hover:shadow-md hover:border-[#CBD5E1] transition-all cursor-pointer relative"
+                            className={`group bg-white p-4 rounded-xl border border-[#DDE8F2] shadow-xs hover:shadow-md hover:border-[#A9D5E9] transition-all cursor-grab active:cursor-grabbing relative ${draggedTaskId === task.id ? 'opacity-45 scale-[.98]' : ''}`}
                           >
                             {/* Priority Badge & Card Header */}
                             <div className="flex items-center justify-between mb-2">
@@ -296,7 +330,7 @@ export default function ProjectsPage() {
                               </span>
 
                               {/* Column move controls */}
-                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 {columns.findIndex((c) => c.id === col.id) > 0 && (
                                   <button
                                     type="button"
@@ -604,8 +638,8 @@ export default function ProjectsPage() {
         <TaskDetailModal
           task={selectedTask}
           columns={columns}
-          teamProfiles={[...(currentProfile ? [currentProfile] : []), ...teamProfiles]}
-          onClose={() => setSelectedTask(null)}
+          teamProfiles={Array.from(new Map([...(currentProfile ? [currentProfile] : []), ...teamProfiles].map((profile) => [profile.id, profile])).values())}
+          onClose={handleCloseTask}
           onUpdate={updateTask}
           onDelete={deleteTask}
           onAddComment={addTaskComment}
@@ -640,18 +674,34 @@ function TaskDetailModal({
   const [dueDate, setDueDate] = useState(task.due_date ? task.due_date.split('T')[0] : '')
 
   const [commentText, setCommentText] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [isCommenting, setIsCommenting] = useState(false)
   const { data: comments = [], isLoading: commentsLoading } = useTaskComments(task.id)
 
   const handleSave = async () => {
-    await onUpdate({
-      taskId: task.id,
-      title,
-      description,
-      priority,
-      assigneeId: assigneeId || null,
-      dueDate: dueDate || null
-    })
-    onClose()
+    if (!title.trim()) {
+      setSaveError('Task title is required.')
+      return
+    }
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await onUpdate({
+        taskId: task.id,
+        title: title.trim(),
+        description,
+        priority,
+        columnId,
+        assigneeId: assigneeId || null,
+        dueDate: dueDate || null
+      })
+      onClose()
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Changes could not be saved.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -664,8 +714,13 @@ function TaskDetailModal({
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!commentText.trim()) return
-    await onAddComment({ taskId: task.id, comment: commentText.trim() })
-    setCommentText('')
+    setIsCommenting(true)
+    try {
+      await onAddComment({ taskId: task.id, comment: commentText.trim() })
+      setCommentText('')
+    } finally {
+      setIsCommenting(false)
+    }
   }
 
   return (
@@ -674,7 +729,7 @@ function TaskDetailModal({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#F3F4F6] text-[#4B5563]">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#EEEAFB] text-[#5141BF]">
               {columns.find((c) => c.id === columnId)?.name}
             </span>
           </div>
@@ -709,7 +764,19 @@ function TaskDetailModal({
           </div>
 
           {/* Controls Row */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
+                Status
+              </label>
+              <select
+                value={columnId}
+                onChange={(e) => setColumnId(e.target.value)}
+                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
+              >
+                {columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
+              </select>
+            </div>
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
                 Priority
@@ -717,7 +784,7 @@ function TaskDetailModal({
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none"
+                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -733,7 +800,7 @@ function TaskDetailModal({
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none"
+                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
               >
                 <option value="">Unassigned</option>
                 {teamProfiles.map((p) => (
@@ -752,7 +819,7 @@ function TaskDetailModal({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none"
+                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
               />
             </div>
           </div>
@@ -767,7 +834,7 @@ function TaskDetailModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add detailed task requirements..."
-              className="w-full text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:border-[#3B82F6] leading-relaxed"
+                className="w-full text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:border-[#5141BF] leading-relaxed"
             />
           </div>
 
@@ -810,31 +877,36 @@ function TaskDetailModal({
                 placeholder="Write a comment..."
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#3B82F6]"
+                disabled={isCommenting}
+                className="flex-1 px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#5141BF] disabled:opacity-60"
               />
               <button
                 type="submit"
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#1E40AF] hover:bg-[#1D4ED8] rounded-lg"
+                disabled={isCommenting || !commentText.trim()}
+                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#5141BF] hover:bg-[#4133A5] rounded-lg disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Send
+                {isCommenting ? 'Sending…' : 'Send'}
               </button>
             </form>
           </div>
         </div>
 
         {/* Modal Footer */}
+        {saveError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{saveError}</p>}
         <div className="flex justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="px-3.5 py-1.5 text-xs font-semibold text-[#4B5563] hover:bg-[#F3F4F6] rounded-lg"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 text-xs font-semibold text-white bg-[#1E40AF] hover:bg-[#1D4ED8] rounded-lg shadow-xs"
+            disabled={isSaving}
+            className="min-w-28 px-4 py-1.5 text-xs font-semibold text-white bg-[#5141BF] hover:bg-[#4133A5] rounded-lg shadow-xs disabled:cursor-wait disabled:opacity-60"
           >
-            Save Changes
+            {isSaving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </div>

@@ -1,13 +1,17 @@
 {
-  "name": "loop-app",
+  "name": "bysync-app",
   "version": "1.0.0",
-  "description": "Loop - Internal Team Communication & Collaboration App",
+  "description": "BySync - Team Communication & Work Management",
+  "author": "Bytechsol LLC",
   "private": true,
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "desktop": "electron desktop",
+    "desktop:build": "electron-builder --projectDir desktop --win nsis"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.2.0",
@@ -36,7 +40,7 @@
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.21.0",
     "next": "^16.2.9",
-    "nodemailer": "^9.0.6",
+    "nodemailer": "^10.0.9",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^3.6.0"
@@ -46,10 +50,41 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.0",
+    "electron": "^45.0.0",
+    "electron-builder": "26.18.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.9",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.bytechsol.bysync",
+    "productName": "BySync",
+    "copyright": "Copyright © 2026 Bytechsol LLC",
+    "asar": true,
+    "directories": {
+      "output": "desktop-dist",
+      "buildResources": "desktop/assets"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "desktop/assets/icon.png",
+      "signExecutable": false,
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "BySync-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BySync"
+    }
   }
 }

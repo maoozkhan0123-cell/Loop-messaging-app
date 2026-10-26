@@ -37,7 +37,6 @@ export function useChannels() {
 
       if (active.length === 0) return []
 
-      const channelIds = active.map((m) => m.channel_id)
       const dmMemberships = active.filter((m) => {
         const ch = m.channels as Channel
         return ch.type === 'dm' || ch.type === 'group_dm'

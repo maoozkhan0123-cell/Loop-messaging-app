@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Hash, Lock, MessageSquare, SquarePen, ChevronDown, Users, Menu } from 'lucide-react'
+import { Search, Hash, Lock, MessageSquare, SquarePen, ChevronDown, Users, Menu, Bell } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useChannels, useCreateDM } from '@/hooks/useChannels'
 import { useAllProfiles } from '@/hooks/useProfiles'
@@ -23,6 +23,7 @@ export function Toolbar() {
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -74,6 +75,8 @@ export function Toolbar() {
   const dmChannels = (channels ?? []).filter(
     (c) => (c.type === 'dm' || c.type === 'group_dm') && (c.other_member as Profile | undefined)?.display_name
   )
+  const unreadChannels = (channels ?? []).filter((channel) => (channel.unread_count ?? 0) > 0)
+  const totalUnread = unreadChannels.reduce((total, channel) => total + (channel.unread_count ?? 0), 0)
 
   const filteredChannels = q
     ? publicChannels.filter((c) => c.name?.toLowerCase().includes(q))
@@ -162,7 +165,7 @@ export function Toolbar() {
       className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 px-2 sm:px-4 relative z-30"
       style={{
         height: 41,
-        background: '#0D1F31',
+        background: 'linear-gradient(105deg, #202B75 0%, #2B3990 52%, #167EBA 100%)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}
     >
@@ -180,7 +183,7 @@ export function Toolbar() {
       <button
         type="button"
         className="flex items-center gap-1 flex-shrink-0 hover:bg-white/10 rounded-lg px-1.5 sm:px-2 py-1 transition-colors"
-        onClick={() => router.push('/')}
+        onClick={() => router.push('/dashboard')}
       >
         <span className="font-bold text-[14px] sm:text-[15px] text-white tracking-tight truncate max-w-[90px] sm:max-w-none">
           Bytechsol
@@ -323,7 +326,7 @@ export function Toolbar() {
       </div>
 
       {/* ── Right actions ── */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="relative flex items-center gap-1 flex-shrink-0">
         <button
           type="button"
           title="New message"
@@ -335,12 +338,36 @@ export function Toolbar() {
         </button>
         <button
           type="button"
+          title="Notifications"
+          onClick={() => setNotificationsOpen((open) => !open)}
+          className="relative w-8 h-8 flex items-center justify-center rounded-lg text-white/75 hover:text-white hover:bg-white/15 transition-colors"
+        >
+          <Bell size={15} />
+          {totalUnread > 0 && <span className="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-[#27AAE1] px-1 text-[9px] font-bold text-white ring-2 ring-[#2B3990]">{totalUnread > 99 ? '99+' : totalUnread}</span>}
+        </button>
+        <button
+          type="button"
           title="People"
           onClick={() => router.push('/people')}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-white/75 hover:text-white hover:bg-white/15 transition-colors"
         >
           <Users size={15} />
         </button>
+        {notificationsOpen && (
+          <>
+            <button aria-label="Close notifications" className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
+            <div className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-[#DDE8F2] bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[#E8F0F6] px-4 py-3"><div><p className="text-sm font-bold text-[#101828]">Notifications</p><p className="text-[11px] text-[#7E8FA3]">Unread conversations</p></div>{totalUnread > 0 && <span className="rounded-full bg-[#EAF7FC] px-2 py-1 text-[10px] font-bold text-[#289ED8]">{totalUnread} new</span>}</div>
+              <div className="max-h-80 overflow-y-auto p-2">
+                {unreadChannels.length === 0 ? <div className="px-4 py-8 text-center"><Bell size={20} className="mx-auto mb-2 text-[#A9BAC8]" /><p className="text-sm font-semibold text-[#344054]">You&apos;re all caught up</p><p className="mt-1 text-xs text-[#98A2B3]">New messages will appear here.</p></div> : unreadChannels.map((channel) => {
+                  const other = channel.other_member as Profile | undefined
+                  const label = channel.type === 'dm' || channel.type === 'group_dm' ? other?.display_name || 'Direct message' : `# ${channel.name}`
+                  return <button key={channel.id} onClick={() => { setNotificationsOpen(false); router.push(`${channel.type === 'dm' || channel.type === 'group_dm' ? '/dm' : '/channel'}/${channel.id}`) }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[#F3F9FC]"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#EAF7FC] text-[#289ED8]">{channel.type === 'dm' || channel.type === 'group_dm' ? <MessageSquare size={16} /> : <Hash size={16} />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[#101828]">{label}</span><span className="text-xs text-[#7E8FA3]">New unread messages</span></span><span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#289ED8] px-1 text-[10px] font-bold text-white">{channel.unread_count}</span></button>
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

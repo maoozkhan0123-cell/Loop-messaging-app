@@ -54,9 +54,9 @@ export function isImageMime(mimeType: string | null): boolean {
 }
 
 const AVATAR_COLORS = [
-  '#3589FA', // Loop blue
-  '#36D7AE', // Loop teal
-  '#132A42', // Loop navy
+  '#3589FA', // BySync blue
+  '#36D7AE', // BySync teal
+  '#132A42', // BySync navy
   '#7C5CFC', // violet
   '#E67E22', // orange
   '#E74C3C', // coral red

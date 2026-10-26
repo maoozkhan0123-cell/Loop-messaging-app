@@ -146,6 +146,14 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
     setPendingFiles((prev) => prev.filter((_, i) => i !== idx))
     setPendingPreviews((prev) => prev.filter((_, i) => i !== idx))
     setUploadingSet((prev) => { const s = new Set(prev); s.delete(file); return s })
+    const pendingUpload = uploadPromisesRef.current.get(file)
+    if (pendingUpload) {
+      void pendingUpload.then((objectKey) => {
+        if (objectKey) void supabase.storage.from('attachments').remove([objectKey])
+      })
+    }
+    uploadedKeysRef.current.delete(file)
+    uploadPromisesRef.current.delete(file)
   }
 
   // ── Send ───────────────────────────────────────────────────────────────────
@@ -210,7 +218,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
       if (savedFiles.length > 0) {
         const { data: { user } } = await supabase.auth.getUser()
 
-        await Promise.all(savedFiles.map(async (file) => {
+        const attachmentErrors = (await Promise.all(savedFiles.map(async (file) => {
           try {
             // If pre-upload finished: objectKey is ready. If still in progress: await it.
             let objectKey = uploadedKeysRef.current.get(file) ?? undefined
@@ -218,9 +226,9 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
               const promise = uploadPromisesRef.current.get(file)
               objectKey = (promise ? await promise : null) ?? undefined
             }
-            if (!objectKey) return // upload failed — skip silently
+            if (!objectKey) return `${file.name}: upload failed`
 
-            await supabase.from('attachments').insert({
+            const { error: attachmentError } = await supabase.from('attachments').insert({
               message_id: messageId as string,
               uploader_id: user?.id ?? null,
               object_key: objectKey,
@@ -228,9 +236,19 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
               mime_type: file.type || null,
               size_bytes: file.size,
             })
+            if (attachmentError) {
+              await supabase.storage.from('attachments').remove([objectKey])
+              return `${file.name}: ${attachmentError.message}`
+            }
+            return null
             // Realtime INSERT on attachments → appendAttachment → image appears in chat
-          } catch { /* silent — message text already delivered */ }
-        }))
+          } catch (fileError) {
+            return `${file.name}: ${fileError instanceof Error ? fileError.message : 'upload failed'}`
+          }
+        }))).filter(Boolean)
+        if (attachmentErrors.length) setError(`Message sent, but some files failed:\n${attachmentErrors.join('\n')}`)
+        void queryClient.invalidateQueries({ queryKey: ['my-files'] })
+        void queryClient.invalidateQueries({ queryKey: ['channel-files', channelId] })
       }
     } catch (err) {
       setBody(savedBody)
@@ -243,7 +261,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         uploadPromisesRef.current.delete(f)
       })
     }
-  }, [body, pendingFiles, channelId, parentId, isSending, supabase, profile, queryClient]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, pendingFiles, channelId, parentId, isSending, supabase, profile, queryClient])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend() }
@@ -375,6 +393,8 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
                   {isImg && preview ? (
                     /* Image thumbnail */
                     <div className="w-[80px] h-[80px] rounded-lg overflow-hidden border border-[#E5E7EB] bg-[#F9FAFB]">
+                      {/* Local blob preview cannot be optimized by next/image. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={preview} alt={file.name} className="w-full h-full object-cover" />
                       {uploadingSet.has(file) && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">

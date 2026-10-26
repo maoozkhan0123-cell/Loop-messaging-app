@@ -2,17 +2,20 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
-import { Camera, Loader2, Check, ArrowLeft, LogOut, User, Briefcase } from 'lucide-react'
+import { Camera, Loader2, Check, ArrowLeft, LogOut, User, Briefcase, Bell, ShieldCheck, KeyRound } from 'lucide-react'
 import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
 import { Avatar } from '@/components/ui/Avatar'
 import { createClient } from '@/lib/supabase/client'
+import { useNotifications } from '@/hooks/useNotifications'
+import { useToast } from '@/components/ui/Toaster'
 
 export default function ProfilePage() {
   const router = useRouter()
   const supabase = createClient()
   const { data: profile, isLoading } = useProfile()
   const updateProfile = useUpdateProfile()
+  const notifications = useNotifications()
+  const { toast } = useToast()
 
   const [displayName, setDisplayName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
@@ -84,6 +87,15 @@ export default function ProfilePage() {
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  const handlePasswordReset = async () => {
+    if (!profile?.email) return
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(profile.email, {
+      redirectTo: `${window.location.origin}/set-password`,
+    })
+    if (resetError) toast({ title: 'Could not send reset email', description: resetError.message, type: 'error' })
+    else toast({ title: 'Password reset sent', description: `Check ${profile.email}`, type: 'success' })
   }
 
   if (isLoading) {
@@ -241,6 +253,25 @@ export default function ProfilePage() {
               )}
             </div>
           </form>
+
+          <section id="preferences" className="mt-4 bg-white rounded-2xl border border-[#E8EAED] shadow-sm overflow-hidden scroll-mt-4">
+            <div className="px-6 py-4 border-b border-[#F3F4F6]">
+              <h2 className="text-sm font-semibold text-[#1A1A2E]">Preferences & security</h2>
+              <p className="text-xs text-[#6B7280] mt-1">Control alerts and protect your company account.</p>
+            </div>
+            <div className="divide-y divide-[#F3F4F6]">
+              <button type="button" onClick={notifications.toggle} className="w-full px-6 py-4 flex items-center gap-3 text-left hover:bg-[#F8FAFC] transition-colors">
+                <span className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#3589FA] flex items-center justify-center"><Bell size={17} /></span>
+                <span className="flex-1"><span className="block text-sm font-semibold text-[#1A1A2E]">Desktop notifications</span><span className="block text-xs text-[#6B7280] mt-0.5">{notifications.permission === 'denied' ? 'Blocked in browser settings' : 'Alert me about new messages'}</span></span>
+                <span className={cn('relative w-10 h-6 rounded-full transition-colors', notifications.enabled ? 'bg-[#3589FA]' : 'bg-[#D1D5DB]')}><span className={cn('absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all', notifications.enabled ? 'left-5' : 'left-1')} /></span>
+              </button>
+              <button type="button" onClick={() => void handlePasswordReset()} className="w-full px-6 py-4 flex items-center gap-3 text-left hover:bg-[#F8FAFC] transition-colors">
+                <span className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><KeyRound size={17} /></span>
+                <span className="flex-1"><span className="block text-sm font-semibold text-[#1A1A2E]">Change password</span><span className="block text-xs text-[#6B7280] mt-0.5">Send a secure password reset link to your email</span></span>
+                <ShieldCheck size={18} className="text-emerald-500" />
+              </button>
+            </div>
+          </section>
 
           {/* Sign out */}
           <div className="mt-4 bg-white rounded-2xl border border-[#E8EAED] shadow-sm p-4">

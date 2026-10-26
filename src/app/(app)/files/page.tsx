@@ -1,19 +1,29 @@
 'use client'
 
-import { useState } from 'react'
-import { Download, FileText, Image, File, Hash, MessageSquare, Search, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Download, FileText, Image as ImageIcon, File, Hash, MessageSquare, Search, X, RefreshCw, ExternalLink, Upload } from 'lucide-react'
 import { useMyFiles } from '@/hooks/useMyFiles'
+import { useChannels } from '@/hooks/useChannels'
 import { useProfile } from '@/hooks/useProfile'
+import { FileUpload } from '@/components/files/FileUpload'
 import { isImageMime, formatFileSize, cn } from '@/lib/utils'
 import { format } from 'date-fns'
+import { useRouter } from 'next/navigation'
 
 type FilterType = 'all' | 'images' | 'documents' | 'other'
 
 export default function FilesPage() {
-  const { data: files, isLoading } = useMyFiles()
+  const { data: files, isLoading, isError, error, refetch, isFetching } = useMyFiles()
+  const router = useRouter()
   const { data: me } = useProfile()
+  const { data: channels = [] } = useChannels()
   const [filter, setFilter] = useState<FilterType>('all')
   const [search, setSearch] = useState('')
+  const [uploadChannelId, setUploadChannelId] = useState('')
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const availableChannels = channels.filter((channel) => !channel.archived_at)
+  const effectiveUploadChannelId = uploadChannelId || availableChannels[0]?.id || ''
 
   const filtered = (files ?? []).filter((f) => {
     const isImg = isImageMime(f.mime_type)
@@ -51,8 +61,17 @@ export default function FilesPage() {
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
-      <div className="border-b border-[#E5E7EB] px-4 sm:px-6 pt-4 sm:pt-5 pb-0 flex-shrink-0">
-        <h1 className="text-[20px] sm:text-[22px] font-bold text-[#111827] mb-2 sm:mb-3">Files</h1>
+      <div className="border-b border-[#DDE8F2] px-4 sm:px-6 pt-4 sm:pt-5 pb-0 flex-shrink-0 bg-[#F8FBFD]">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h1 className="text-[20px] sm:text-[22px] font-bold text-[#101828]">Files</h1><p className="mt-0.5 text-xs text-[#667085]">Browse and share files across your workspace.</p></div>
+          <div className="flex items-center gap-2">
+            <select value={effectiveUploadChannelId} onChange={(event) => setUploadChannelId(event.target.value)} className="h-9 min-w-0 max-w-44 rounded-lg border border-[#D6E2EC] bg-white px-2.5 text-xs text-[#344054] outline-none focus:border-[#289ED8]" aria-label="Upload destination">
+              {availableChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.type === 'dm' || channel.type === 'group_dm' ? 'Direct message' : `# ${channel.name}`}</option>)}
+            </select>
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => { setPendingFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = '' }} />
+            <button type="button" disabled={!effectiveUploadChannelId} onClick={() => fileInputRef.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-[#2B3990] to-[#289ED8] px-3.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"><Upload size={14} /> Upload</button>
+          </div>
+        </div>
 
         {/* Filter tabs */}
         <div className="flex items-center gap-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
@@ -64,17 +83,17 @@ export default function FilesPage() {
               className={cn(
                 'flex items-center gap-1.5 h-9 px-3 sm:px-4 text-[13px] font-medium border-b-2 transition-all capitalize flex-shrink-0',
                 filter === tab
-                  ? 'text-[#3589FA] border-[#3589FA]'
+                  ? 'text-[#289ED8] border-[#289ED8]'
                   : 'text-[#6B7280] border-transparent hover:text-[#1D1C1D]'
               )}
             >
-              {tab === 'images' && <Image size={13} />}
+              {tab === 'images' && <ImageIcon size={13} />}
               {tab === 'documents' && <FileText size={13} />}
               {tab === 'other' && <File size={13} />}
               {tab}
               <span className={cn(
                 'ml-0.5 text-[11px] px-1.5 py-0.5 rounded-full',
-                filter === tab ? 'bg-[#EBF5FF] text-[#3589FA]' : 'bg-[#F3F4F6] text-[#9CA3AF]'
+                filter === tab ? 'bg-[#EAF7FC] text-[#289ED8]' : 'bg-[#F3F4F6] text-[#9CA3AF]'
               )}>
                 {counts[tab]}
               </span>
@@ -106,6 +125,8 @@ export default function FilesPage() {
         <div className="flex-1 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[#3589FA] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : isError ? (
+        <div className="flex-1 flex items-center justify-center px-4"><div className="max-w-md text-center"><div className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3"><FileText size={24} /></div><p className="text-[15px] font-semibold text-[#374151]">Files could not be loaded</p><p className="text-xs text-[#9CA3AF] mt-1 mb-4">{error instanceof Error ? error.message : 'Please check your connection and try again.'}</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="h-9 px-4 rounded-lg bg-[#3589FA] text-white text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-60"><RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />Retry</button></div></div>
       ) : filtered.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center px-4">
@@ -116,6 +137,7 @@ export default function FilesPage() {
             <p className="text-[13px] text-[#9CA3AF]">
               {search ? `No files match "${search}"` : 'Files shared in your channels will appear here.'}
             </p>
+            {!search && <button type="button" onClick={() => router.push('/people')} className="mt-4 h-9 px-4 rounded-lg bg-[#3589FA] text-white text-sm font-semibold">Open a conversation</button>}
           </div>
         </div>
       ) : (
@@ -138,6 +160,8 @@ export default function FilesPage() {
                   {/* Thumbnail / icon */}
                   {isImg ? (
                     <a href={url} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 hover:opacity-90 transition-opacity">
+                      {/* Signed storage URLs are short-lived and should not be cached by an image optimizer. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={url} alt={file.file_name} className="w-full h-full object-cover" />
                     </a>
                   ) : (
@@ -152,7 +176,7 @@ export default function FilesPage() {
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-[#9CA3AF]">{formatFileSize(file.size_bytes)}</span>
                       <span className="text-[#D1D5DB] text-[11px]">·</span>
-                      <span className="text-[11px] text-[#9CA3AF]">{isOwn ? 'You' : 'Someone'}</span>
+                      <span className="text-[11px] text-[#9CA3AF]">{isOwn ? 'You' : (file.uploader_name || 'Team member')}</span>
                       {file.channel_name && (
                         <>
                           <span className="text-[#D1D5DB] text-[11px]">·</span>
@@ -173,14 +197,23 @@ export default function FilesPage() {
                   <a
                     href={url}
                     download={file.file_name}
-                    className="opacity-0 group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-all flex-shrink-0"
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-all flex-shrink-0"
                     title="Download"
                   >
                     <Download size={16} />
                   </a>
+                  {file.channel_id && <button type="button" title="Open conversation" onClick={() => router.push(`${isDM ? '/dm' : '/channel'}/${file.channel_id}`)} className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-all flex-shrink-0"><ExternalLink size={15} /></button>}
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {pendingFiles.length > 0 && effectiveUploadChannelId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#101828]/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingFiles([]) }}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-2 shadow-2xl">
+            <FileUpload channelId={effectiveUploadChannelId} files={pendingFiles} onClose={() => setPendingFiles([])} onComplete={() => { setPendingFiles([]); void refetch() }} />
           </div>
         </div>
       )}

@@ -29,7 +29,7 @@ export function useChannelFiles(channelId: string) {
         ? await supabase.storage.from('attachments').createSignedUrls(rows.map((row) => row.object_key), 3600)
         : { data: [] }
       const urlMap = new Map((signed ?? []).map((item: { path: string; signedUrl: string }) => [item.path, item.signedUrl]))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       return rows.map((row) => ({
         ...row,
         sender_id: row.messages?.user_id ?? null,

@@ -1,0 +1,39 @@
+{
+  "name": "bysync-desktop",
+  "version": "1.0.0",
+  "description": "BySync desktop application by Bytechsol LLC",
+  "author": "Bytechsol LLC",
+  "private": true,
+  "main": "main.cjs",
+  "build": {
+    "appId": "com.bytechsol.bysync",
+    "productName": "BySync",
+    "copyright": "Copyright © 2026 Bytechsol LLC",
+    "electronVersion": "45.0.0",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "../desktop-dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/icon.png",
+      "signExecutable": false,
+      "target": ["nsis"],
+      "artifactName": "BySync-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BySync"
+    }
+  }
+}

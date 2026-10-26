@@ -113,7 +113,7 @@ export function useGlobalNotifications(
 
           const n = new Notification(`New message from ${displayName ?? 'Someone'}`, {
             body: row.body?.slice(0, 120) ?? 'Sent an attachment',
-            icon: '/loop-logo.svg',
+            icon: '/bysync-logo.svg',
           })
           n.onclick = () => { window.focus(); n.close() }
         }

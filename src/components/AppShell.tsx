@@ -29,9 +29,10 @@ export const MobileNavContext = createContext<MobileNavContextType>({
 export const useMobileNav = () => useContext(MobileNavContext)
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const isMessagingRoute = pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people'
+  const [sidebarOpen, setSidebarOpen] = useState(isMessagingRoute)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { data: myProfile } = useProfile()
   const { data: channels } = useChannels()
 
@@ -57,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Auto-close mobile navigation drawer on route change
   useEffect(() => {
     setMobileMenuOpen(false)
+    setSidebarOpen(pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people')
   }, [pathname])
 
   // Stable channel ID list — used by global notification subscription.
@@ -74,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <MobileNavContext.Provider
       value={{ mobileMenuOpen, setMobileMenuOpen, toggleMobileMenu, closeMobileMenu }}
     >
-      <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#0D1F31' }}>
+      <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#2B3990' }}>
         {/* ── Top toolbar: spans full width ── */}
         <Toolbar />
 
@@ -83,8 +85,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Desktop view: side-by-side icon rail + workspace sidebar */}
           <div className="hidden md:flex flex-shrink-0 h-full">
             <IconRail
-              sidebarOpen={sidebarOpen}
-              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+              onOpenSidebar={() => setSidebarOpen(true)}
+              onCloseSidebar={() => setSidebarOpen(false)}
             />
 
             <AnimatePresence initial={false}>
@@ -129,8 +131,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <div className="flex h-full">
                     <IconRail
-                      sidebarOpen={true}
-                      onToggleSidebar={closeMobileMenu}
+                      onOpenSidebar={() => {}}
+                      onCloseSidebar={closeMobileMenu}
                     />
                     <div className="h-full relative">
                       <Sidebar />

@@ -13,11 +13,11 @@ import { cn } from '@/lib/utils'
 import { useMobileNav } from '@/components/AppShell'
 
 interface IconRailProps {
-  sidebarOpen: boolean
-  onToggleSidebar: () => void
+  onOpenSidebar: () => void
+  onCloseSidebar: () => void
 }
 
-export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
+export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { closeMobileMenu } = useMobileNav()
@@ -29,7 +29,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { enabled: notifEnabled, permission: notifPermission, toggle: toggleNotif } = useNotifications()
 
-  const isHome = pathname === '/' || pathname.includes('/channel')
+  const isHome = pathname === '/' || pathname === '/dashboard'
   const isDM = pathname.includes('/dm') || pathname.includes('/people')
 
   const statusColor =
@@ -68,7 +68,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
       // Bust the cache
       const busted = `${publicUrl}?t=${Date.now()}`
       await updateProfile.mutateAsync({ avatar_url: busted })
-    } catch (err) {
+    } catch {
       alert('Upload failed. Make sure the "avatars" storage bucket exists in Supabase.')
     } finally {
       setUploading(false)
@@ -78,28 +78,28 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
 
   return (
     <aside
-      className="flex flex-col items-center flex-shrink-0 relative z-20 shadow-xl border-r border-[#27272A]"
-      style={{ width: 70, background: '#000000', height: '100%', paddingTop: 10, paddingBottom: 12 }}
+      className="flex flex-col items-center flex-shrink-0 relative z-20 shadow-xl border-r border-white/10"
+      style={{ width: 70, background: 'linear-gradient(180deg, #141B57 0%, #202B75 55%, #17205F 100%)', height: '100%', paddingTop: 10, paddingBottom: 12 }}
     >
       {/* Workspace logo */}
       <button
         type="button"
-        onClick={onToggleSidebar}
-        title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }}
+        title="Go to Home"
         style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, display: 'block', marginBottom: 14 }}
-        className="hover:scale-105 transition-transform focus-visible:outline-none bg-black border border-[#27272A] shadow-md"
+        className="hover:scale-105 transition-transform focus-visible:outline-none bg-white border border-white/20 shadow-md"
       >
-        <Image src="/loop-logo.svg" alt="Loop" width={44} height={44} priority style={{ objectFit: 'cover', display: 'block' }} />
+        <Image src="/bysync-logo.svg" alt="BySync" width={44} height={44} priority style={{ objectFit: 'cover', display: 'block' }} />
       </button>
 
       {/* Nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
-        <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { closeMobileMenu(); router.push('/') }} />
-        <RailBtn icon={MessagesSquare} label="DMs" isActive={isDM} onClick={() => { closeMobileMenu(); router.push('/people') }} />
-        <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { closeMobileMenu(); router.push('/files') }} />
-        <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { closeMobileMenu(); router.push('/projects') }} />
-        <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { closeMobileMenu(); router.push('/ideas') }} />
-        <RailBtn icon={MoreHorizontal} label="More" isActive={false} onClick={() => {}} />
+        <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
+        <RailBtn icon={MessagesSquare} label="DMs" isActive={isDM} onClick={() => { onOpenSidebar(); router.push('/people') }} />
+        <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/files') }} />
+        <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/projects') }} />
+        <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/ideas') }} />
+        <RailBtn icon={MoreHorizontal} label="More" isActive={pathname === '/profile'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/profile') }} />
       </div>
 
       <div style={{ flex: 1 }} />
@@ -133,7 +133,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
                 style={{
                   position: 'absolute', bottom: -2, right: -2,
                   width: 12, height: 12, borderRadius: '50%',
-                  background: statusColor, border: '2px solid #0D1F31',
+                  background: statusColor, border: '2px solid #111827',
                   display: profile.status === 'offline' || !profile.status ? 'none' : 'block'
                 }}
               />
@@ -173,7 +173,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="text-[11px] text-[#3589FA] hover:underline mt-0.5"
+                    className="text-[11px] text-[#289ED8] hover:underline mt-0.5"
                   >
                     {uploading ? 'Uploading…' : 'Change photo'}
                   </button>
@@ -181,7 +181,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
               </div>
 
               <div className="px-4 py-2 bg-white">
-                <button className="w-full flex items-center gap-2 border border-[#9CA3AF] rounded-md px-3 h-9 text-[#6B7280] hover:bg-[#F8F8F8] transition-colors text-[13px]">
+                <button type="button" onClick={handleStatusToggle} className="w-full flex items-center gap-2 border border-[#9CA3AF] rounded-md px-3 h-9 text-[#6B7280] hover:bg-[#F8F8F8] transition-colors text-[13px]">
                   <Smile size={16} />
                   Update your status
                 </button>
@@ -192,18 +192,18 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
                 <button
                   type="button"
                   onClick={toggleNotif}
-                  className="w-full flex items-center justify-between px-3 h-9 rounded text-[13px] text-[#1D1C1D] hover:bg-[#3589FA] hover:text-white group transition-none"
+                  className="w-full flex items-center justify-between px-3 h-9 rounded text-[13px] text-[#1D1C1D] hover:bg-[#289ED8] hover:text-white group transition-none"
                 >
                   <div className="flex items-center gap-2">
                     {notifEnabled
-                      ? <Bell size={14} className="text-[#3589FA] group-hover:text-white" />
+                      ? <Bell size={14} className="text-[#289ED8] group-hover:text-white" />
                       : <BellOff size={14} className="text-[#9CA3AF] group-hover:text-white" />
                     }
                     <span>Notifications</span>
                   </div>
                   <div className={cn(
                     'relative w-9 h-5 rounded-full transition-colors flex-shrink-0',
-                    notifEnabled ? 'bg-[#3589FA] group-hover:bg-white/30' : 'bg-[#D1D5DB] group-hover:bg-white/30'
+                    notifEnabled ? 'bg-[#289ED8] group-hover:bg-white/30' : 'bg-[#D1D5DB] group-hover:bg-white/30'
                   )}>
                     <span className={cn(
                       'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all',
@@ -220,7 +220,7 @@ export function IconRail({ sidebarOpen, onToggleSidebar }: IconRailProps) {
 
               <div className="px-1 py-1">
                 <MenuItem onClick={() => { setMenuOpen(false); router.push('/profile') }} label="Profile" />
-                <MenuItem onClick={() => {}} label="Preferences" />
+                <MenuItem onClick={() => { setMenuOpen(false); router.push('/profile#preferences') }} label="Preferences" />
               </div>
 
               <div className="h-px bg-[#E5E7EB] my-1" />
@@ -248,7 +248,7 @@ function MenuItem({ onClick, label, rightLabel, icon }: { onClick: () => void; l
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center justify-between px-3 h-7 rounded text-[13px] text-[#1D1C1D] hover:bg-[#3589FA] hover:text-white group transition-none"
+      className="w-full flex items-center justify-between px-3 h-7 rounded text-[13px] text-[#1D1C1D] hover:bg-[#289ED8] hover:text-white group transition-none"
     >
       <div className="flex items-center gap-2">
         {icon && <span className="rotate-45 block">🚀</span>}
@@ -270,17 +270,17 @@ function RailBtn({ icon: Icon, label, isActive, onClick }: { icon: React.Compone
       <span
         style={{
           width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: isActive ? '#FFFFFF' : 'transparent',
-          boxShadow: isActive ? '0 4px 12px rgba(255,255,255,0.15)' : 'none',
+          background: isActive ? 'linear-gradient(135deg, #289ED8, #27AAE1)' : 'transparent',
+          boxShadow: isActive ? '0 6px 16px rgba(40,158,216,0.35)' : 'none',
           transition: 'all 0.15s ease',
         }}
         className={cn(!isActive && 'group-hover:bg-white/15')}
       >
-        <Icon size={20} className={cn('transition-all group-hover:scale-110', isActive ? 'text-[#000000]' : 'text-zinc-400 group-hover:text-white')} />
+        <Icon size={20} className={cn('transition-all group-hover:scale-110', isActive ? 'text-white' : 'text-blue-100/65 group-hover:text-white')} />
       </span>
       <span
         style={{ fontSize: 10, lineHeight: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}
-        className={cn('transition-colors', isActive ? 'text-white font-bold' : 'text-zinc-400 group-hover:text-zinc-200')}
+        className={cn('transition-colors', isActive ? 'text-white font-bold' : 'text-blue-100/60 group-hover:text-white')}
       >
         {label}
       </span>

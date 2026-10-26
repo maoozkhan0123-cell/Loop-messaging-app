@@ -1,37 +1,47 @@
 @import "tailwindcss";
 
+@layer components {
+  .member-input {
+    @apply w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 outline-none transition;
+  }
+  .member-input:focus {
+    border-color: #289ED8;
+    box-shadow: 0 0 0 3px rgba(40, 158, 216, 0.15);
+  }
+}
+
 @theme {
   /* ── Monochrome Brand palette ── */
-  --color-brand-blue:   #000000;
-  --color-brand-teal:   #18181B;
-  --color-brand-navy:   #09090B;
+  --color-brand-blue:   #289ED8;
+  --color-brand-teal:   #27AAE1;
+  --color-brand-navy:   #2B3990;
 
-  --color-accent:        #000000;
-  --color-accent-hover:  #18181B;
-  --color-accent-light:  #F4F4F5;
-  --color-teal:          #18181B;
-  --color-teal-light:    #F4F4F5;
+  --color-accent:        #289ED8;
+  --color-accent-hover:  #2B3990;
+  --color-accent-light:  #EAF7FC;
+  --color-teal:          #27AAE1;
+  --color-teal-light:    #EAF7FC;
 
   /* ── Sidebar (Monochrome black theme) ── */
-  --color-sidebar-bg:      #09090B;
-  --color-sidebar-deeper:  #000000;
+  --color-sidebar-bg:      #202B75;
+  --color-sidebar-deeper:  #141B57;
   --color-sidebar-hover:   rgba(255,255,255,0.1);
-  --color-sidebar-active:  rgba(255,255,255,0.2);
+  --color-sidebar-active:  rgba(40,158,216,0.35);
   --color-sidebar-border:  rgba(255,255,255,0.1);
   --color-sidebar-text:    rgba(255,255,255,0.9);
   --color-sidebar-muted:   rgba(255,255,255,0.5);
 
   /* ── Main content area (clean white & stark black) ── */
-  --color-main-bg:    #FFFFFF;
-  --color-thread-bg:  #FAFAFA;
+  --color-main-bg:    #F4F8FC;
+  --color-thread-bg:  #F7FAFD;
 
   /* ── Standard UI colors ── */
-  --color-border:        #E4E4E7;
-  --color-border-strong: #27272A;
+  --color-border:        #DDE8F2;
+  --color-border-strong: #B9CCDC;
 
-  --color-text-primary:   #000000;
-  --color-text-secondary: #52525B;
-  --color-text-muted:     #A1A1AA;
+  --color-text-primary:   #101828;
+  --color-text-secondary: #475467;
+  --color-text-muted:     #98A2B3;
 
   --color-status-online:   #10B981;
   --color-status-away:     #F59E0B;
@@ -63,8 +73,15 @@ body {
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
 
-.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
-.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+.sidebar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
 .message-body {
   font-family: var(--font-message);
@@ -75,9 +92,9 @@ body {
 }
 
 *:focus-visible {
-  outline: 2px solid #3589FA;
+  outline: 2px solid #289ED8;
   outline-offset: 2px;
 }
 
-.message-body a { color: #3589FA; text-decoration: underline; }
-.message-body a:hover { color: #2575E8; }
+.message-body a { color: #289ED8; text-decoration: underline; }
+.message-body a:hover { color: #2B3990; }

@@ -1,7 +1,7 @@
 // Browser desktop notification utilities (same-browser/same-device only)
 // Cross-browser/cross-device requires Push API + Service Worker + VAPID — not implemented here.
 
-const PREF_KEY = 'loop_notifications_enabled'
+const PREF_KEY = 'bysync_notifications_enabled'
 
 export function getNotificationPref(): boolean {
   if (typeof window === 'undefined') return false
@@ -27,14 +27,14 @@ export async function requestNotificationPermission(): Promise<'granted' | 'deni
  *  - Browser permission is granted
  *  - The document is NOT focused (user is away / on a different tab)
  */
-export function maybeNotify(title: string, body: string, icon = '/loop.svg'): void {
+export function maybeNotify(title: string, body: string, icon = '/bysync-logo.svg'): void {
   if (!getNotificationPref()) return
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission !== 'granted') return
   if (document.hasFocus()) return
 
   try {
-    const n = new Notification(title, { body, icon, tag: 'loop-msg' })
+    const n = new Notification(title, { body, icon, tag: 'bysync-msg' })
     n.onclick = () => { window.focus(); n.close() }
   } catch {
     // silently ignore (e.g., Safari quirks)

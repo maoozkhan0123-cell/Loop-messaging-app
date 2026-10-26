@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Upload, File, Image, Loader2, AlertCircle } from 'lucide-react'
+import { X, Upload, File, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatFileSize, isImageMime } from '@/lib/utils'
@@ -35,6 +35,11 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
     setSubmitError(null)
 
     try {
+      const oversized = files.find((file) => file.size > 25 * 1024 * 1024)
+      if (oversized) throw new Error(`${oversized.name} is larger than the 25 MB upload limit.`)
+      const blockedExtensions = ['exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'ps1', 'vbs', 'jar']
+      const unsafe = files.find((file) => blockedExtensions.includes(file.name.split('.').pop()?.toLowerCase() ?? ''))
+      if (unsafe) throw new Error(`${unsafe.name} is not an allowed file type.`)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
       // Use the send_message RPC (same as MessageInput) — handles membership
@@ -127,7 +132,7 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
         {uploads.map((upload, i) => (
           <div key={i} className="flex items-center gap-3">
             {isImageMime(upload.file.type) ? (
-              <Image size={16} className="text-[#3589FA] flex-shrink-0" />
+              <ImageIcon size={16} className="text-[#3589FA] flex-shrink-0" />
             ) : (
               <File size={16} className="text-[#6B7280] flex-shrink-0" />
             )}

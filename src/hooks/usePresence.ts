@@ -51,7 +51,7 @@ export function usePresence(channelId: string) {
         supabase.removeChannel(channelInstance)
       }
     }
-  }, [channelId]) // supabase is now singleton — stable reference
+  }, [channelId, supabase]) // browser client is a stable singleton
 
   const getUserStatus = useCallback(
     (userId: string): 'online' | 'away' | 'offline' => {
