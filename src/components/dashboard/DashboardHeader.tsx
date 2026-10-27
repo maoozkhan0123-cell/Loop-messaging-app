@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, CheckCheck, ChevronDown, Plus, Search, Settings, UserRound } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
@@ -16,7 +15,6 @@ export function firstNameOf(name?: string | null) { return name?.trim().split(/\
 
 export function DashboardHeader({ user, query, onQueryChange, onNewTask, onNewMessage }: { user?: Profile | null; query: string; onQueryChange: (value: string) => void; onNewTask: () => void; onNewMessage: () => void }) {
   const router = useRouter()
-  const [now, setNow] = useState(() => new Date())
   const { data: channels = [] } = useChannels()
   const markRead = useMarkRead()
   const updateProfile = useUpdateProfile()
@@ -24,12 +22,10 @@ export function DashboardHeader({ user, query, onQueryChange, onNewTask, onNewMe
   const totalUnread = unread.reduce((sum, channel) => sum + (channel.unread_count ?? 0), 0)
   const shortcut = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl+K'
 
-  useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(timer) }, [])
   const markAllRead = async () => { await Promise.all(unread.map((channel) => markRead.mutateAsync(channel.id))) }
   const signOut = async () => { await createClient().auth.signOut(); router.push('/login') }
 
-  return <header className="flex flex-col gap-4 border-b border-[var(--ui-border)] bg-[var(--surface)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-7">
-    <div><h1 className="text-xl font-semibold tracking-[-.025em] text-[var(--foreground)] sm:text-2xl">{greetingForHour(now.getHours())}, {firstNameOf(user?.display_name)}</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">Here&apos;s what&apos;s happening with your team today.</p></div>
+  return <header className="flex min-h-14 items-center justify-end border-b border-[var(--ui-border)] bg-[var(--surface)] px-4 py-2 sm:px-6 lg:px-7">
     <div className="flex items-center gap-2">
       <label className="relative hidden lg:block"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" size={14} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search tasks and projects" className="h-9 w-60 rounded-lg border border-[var(--ui-border)] bg-[var(--surface-muted)] pl-9 pr-12 text-xs outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus-ring)]" /><button type="button" onClick={() => window.dispatchEvent(new Event('open-search'))} className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-[var(--ui-border)] bg-[var(--surface)] px-1.5 py-0.5 text-[9px] text-[var(--muted-foreground)]">{shortcut}</button></label>
 

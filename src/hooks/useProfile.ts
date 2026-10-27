@@ -4,6 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types/database'
 
+export function roleDisplayName(role: unknown, profileName?: string | null, email?: string | null) {
+  const normalizedRole = String(role ?? '').toLowerCase()
+  if (normalizedRole === 'ceo') return 'Maooz KK'
+  if (normalizedRole === 'admin' || email?.toLowerCase() === 'loop@bytechsol.com') return 'Admin'
+  return profileName?.trim() || 'Team member'
+}
+
 export function useProfile() {
   const supabase = createClient()
 
@@ -21,7 +28,8 @@ export function useProfile() {
         .single()
 
       if (error) throw new Error(error.message)
-      return data as Profile
+      const profile = data as Profile
+      return { ...profile, display_name: roleDisplayName(user.app_metadata?.role, profile.display_name, user.email) }
     },
     staleTime: 5 * 60 * 1000, // 5 min cache — updated via mutations
   })
