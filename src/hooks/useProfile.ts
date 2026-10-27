@@ -6,7 +6,7 @@ import type { Profile } from '@/types/database'
 
 export function roleDisplayName(role: unknown, profileName?: string | null, email?: string | null) {
   const normalizedRole = String(role ?? '').toLowerCase()
-  if (normalizedRole === 'ceo') return 'Maooz KK'
+  if (normalizedRole === 'ceo') return 'CEO'
   if (normalizedRole === 'admin' || email?.toLowerCase() === 'loop@bytechsol.com') return 'Admin'
   return profileName?.trim() || 'Team member'
 }

@@ -7,5 +7,5 @@ export default async function CEOLayout({ children }: { children: React.ReactNod
   const supabase = await createClient(); const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   if (!isCEORole(user.app_metadata?.role)) redirect('/dashboard?access=denied')
-  return <CEOShell name="Maooz KK">{children}</CEOShell>
+  return <CEOShell name="CEO">{children}</CEOShell>
 }

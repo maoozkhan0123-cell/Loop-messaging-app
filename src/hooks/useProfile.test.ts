@@ -3,7 +3,7 @@ import { roleDisplayName } from './useProfile'
 
 describe('roleDisplayName', () => {
   it('shows the requested CEO identity instead of an unrelated profile name', () => {
-    expect(roleDisplayName('ceo', 'Abdul Hanan')).toBe('Maooz KK')
+    expect(roleDisplayName('ceo', 'Abdul Hanan')).toBe('CEO')
   })
   it('uses Admin for administrator accounts', () => {
     expect(roleDisplayName('admin', 'Abdul Hanan')).toBe('Admin')
