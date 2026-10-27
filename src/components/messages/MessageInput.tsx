@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Smile, Paperclip, Send, Bold, Italic, Strikethrough, Code,
-  Link2, List, ListOrdered, Quote, AtSign, Mic, MicOff, Plus, X, FileText,
+  Link2, List, ListOrdered, Quote, AtSign, Mic, MicOff, Plus, X, FileText, Clock,
 } from 'lucide-react'
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
 import { useTypingIndicator } from '@/hooks/useTypingIndicator'
@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useQueryClient, InfiniteData } from '@tanstack/react-query'
 import type { Message } from '@/types/database'
 import { cn, formatFileSize, isImageMime } from '@/lib/utils'
+import { usePreferences } from '@/hooks/usePreferences'
+import { bumpThreadReplyCount } from '@/hooks/useMessages'
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
 const MAX_MESSAGE_LENGTH = 10_000
@@ -54,6 +56,9 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const [isSending, setIsSending] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduleFor, setScheduleFor] = useState('')
+  const [scheduleMin, setScheduleMin] = useState('')
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -72,6 +77,20 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const { data: profile } = useProfile()
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { preferences } = usePreferences()
+  const draftKey = `bysync.draft.${channelId}.${parentId ?? 'root'}`
+
+  // Restore and preserve unsent text per conversation. Files remain session-only.
+  useEffect(() => {
+    try { setBody(sessionStorage.getItem(draftKey) ?? '') } catch { setBody('') }
+  }, [draftKey])
+
+  useEffect(() => {
+    try {
+      if (body) sessionStorage.setItem(draftKey, body)
+      else sessionStorage.removeItem(draftKey)
+    } catch {}
+  }, [body, draftKey])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -172,6 +191,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
 
     // Clear input immediately
     setBody('')
+    try { sessionStorage.removeItem(draftKey) } catch {}
     setPendingFiles([])
     setUploadingSet(new Set())
     setPendingPreviews((prev) => { prev.forEach(URL.revokeObjectURL); return [] })
@@ -211,6 +231,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
           return { ...old, pages: next }
         }
       )
+      if (parentId) bumpThreadReplyCount(queryClient, channelId, parentId)
 
       // Step 3: Insert attachment records.
       // Files were already uploaded to Supabase Storage when attached (pre-upload).
@@ -261,10 +282,31 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         uploadPromisesRef.current.delete(f)
       })
     }
-  }, [body, pendingFiles, channelId, parentId, isSending, supabase, profile, queryClient])
+  }, [body, pendingFiles, channelId, parentId, isSending, supabase, profile, queryClient, draftKey])
+
+  const handleSchedule = async () => {
+    const trimmed = body.trim()
+    if (!trimmed || !profile?.id || !scheduleFor) return
+    const when = new Date(scheduleFor)
+    if (when <= new Date()) { setError('Choose a time in the future.'); return }
+    setIsSending(true); setError(null)
+    try {
+      const { error: scheduleError } = await supabase.from('scheduled_messages').insert({
+        user_id: profile.id, channel_id: channelId, parent_id: parentId ?? null,
+        body: trimmed, scheduled_for: when.toISOString(), status: 'pending',
+      })
+      if (scheduleError) throw scheduleError
+      setBody(''); setScheduleFor(''); setScheduleOpen(false)
+      try { sessionStorage.removeItem(draftKey) } catch {}
+      void queryClient.invalidateQueries({ queryKey: ['scheduled-messages'] })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not schedule this message. Apply migration 010 first.')
+    } finally { setIsSending(false) }
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend() }
+    if (e.key === 'Enter' && !e.shiftKey && preferences.enterToSend) { e.preventDefault(); void handleSend() }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !preferences.enterToSend) { e.preventDefault(); void handleSend() }
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrapSelection('**') }
     if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrapSelection('_') }
   }
@@ -369,7 +411,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         onDrop={handleDrop}
       >
         {/* Formatting toolbar */}
-        <div className="flex items-center gap-0.5 px-2 sm:px-3 pt-2 pb-1.5 border-b border-[#F3F4F6] overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        {preferences.markdownHelp && <div className="flex items-center gap-0.5 px-2 sm:px-3 pt-2 pb-1.5 border-b border-[#F3F4F6] overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           <FmtBtn title="Bold (Ctrl+B)" onClick={() => wrapSelection('**')}><Bold size={13} /></FmtBtn>
           <FmtBtn title="Italic (Ctrl+I)" onClick={() => wrapSelection('_')}><Italic size={13} /></FmtBtn>
           <FmtBtn title="Strikethrough" onClick={() => wrapSelection('~~')}><Strikethrough size={13} /></FmtBtn>
@@ -379,8 +421,9 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
           <FmtBtn title="Bullet list" onClick={() => wrapSelection('\n- ', '')}><List size={13} /></FmtBtn>
           <Sep />
           <FmtBtn title="Inline code" onClick={() => wrapSelection('`')}><Code size={13} /></FmtBtn>
+          <FmtBtn title="Code block" onClick={() => wrapSelection('\n```\n', '\n```')}><FileText size={13} /></FmtBtn>
           <FmtBtn title="Block quote" onClick={() => wrapSelection('\n> ', '')}><Quote size={13} /></FmtBtn>
-        </div>
+        </div>}
 
         {/* ── File previews (shows BEFORE sending — like Slack/WhatsApp) ── */}
         {pendingFiles.length > 0 && (
@@ -518,12 +561,17 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
             </button>
           </div>
 
+          <div className="relative">
+            <button type="button" onClick={() => { setScheduleMin(new Date(Date.now() + 60000).toISOString().slice(0,16)); setScheduleOpen((value) => !value) }} disabled={!body.trim() || pendingFiles.length > 0} title="Schedule message" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#3589FA] disabled:cursor-not-allowed disabled:opacity-40"><Clock size={14}/></button>
+            {scheduleOpen && <div className="absolute bottom-11 right-0 z-[210] w-72 rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-xl"><p className="mb-2 text-xs font-bold text-[#111827]">Schedule message</p><input type="datetime-local" value={scheduleFor} min={scheduleMin} onChange={(event) => setScheduleFor(event.target.value)} className="h-9 w-full rounded-lg border border-[#D1D5DB] px-2 text-xs text-[#111827]"/><div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setScheduleOpen(false)} className="h-8 rounded-lg px-3 text-xs font-semibold text-[#6B7280]">Cancel</button><button type="button" onClick={() => void handleSchedule()} disabled={!scheduleFor || isSending} className="h-8 rounded-lg bg-[#3589FA] px-3 text-xs font-bold text-white disabled:opacity-50">Schedule</button></div></div>}
+          </div>
+
           {/* Send */}
           <button
             type="button"
             onClick={() => void handleSend()}
             disabled={!canSend}
-            title="Send (Enter)"
+            title={preferences.enterToSend ? 'Send (Enter)' : 'Send (Ctrl+Enter)'}
             className={cn(
               'w-8 h-8 flex items-center justify-center rounded-lg transition-all',
               canSend

@@ -3,13 +3,14 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import { formatMessageTime, formatShortTime, groupReactions, isImageMime, formatFileSize, cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
-import { Pencil, Trash2, Paperclip, Download, Check, CheckCheck, ChevronRight, Plus, Play, Pause, Mic } from 'lucide-react'
+import { Pencil, Trash2, Paperclip, Download, Check, CheckCheck, ChevronRight, Plus, Play, Pause, Mic, Bookmark, Copy, Link2 } from 'lucide-react'
 import type { Message as MessageType, Attachment } from '@/types/database'
 import { useSignedAttachmentUrl } from '@/hooks/useSignedAttachmentUrl'
 import { useEditMessage, useDeleteMessage } from '@/hooks/useMessages'
 import { useReactions } from '@/hooks/useReactions'
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
 import * as Tooltip from '@radix-ui/react-tooltip'
+import { usePreferences } from '@/hooks/usePreferences'
 
 // 5 quick reactions shown in the hover toolbar (WhatsApp / Slack style)
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢']
@@ -30,12 +31,36 @@ export const Message = memo(function Message({
   const [showFullPicker, setShowFullPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [saved, setSaved] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
   const plusBtnRef = useRef<HTMLButtonElement>(null)
 
   const editMessage = useEditMessage()
   const deleteMessage = useDeleteMessage()
   const { toggleReaction } = useReactions(channelId)
+  const { preferences } = usePreferences()
+
+  useEffect(() => {
+    try {
+      const ids = JSON.parse(localStorage.getItem('bysync.saved-message-ids') || '[]') as string[]
+      setSaved(ids.includes(message.id))
+    } catch { setSaved(false) }
+  }, [message.id])
+
+  const toggleSaved = () => {
+    try {
+      const ids = new Set(JSON.parse(localStorage.getItem('bysync.saved-message-ids') || '[]') as string[])
+      if (ids.has(message.id)) ids.delete(message.id); else ids.add(message.id)
+      localStorage.setItem('bysync.saved-message-ids', JSON.stringify([...ids]))
+      setSaved(ids.has(message.id))
+    } catch {}
+  }
+
+  const copyText = () => { if (message.body) void navigator.clipboard.writeText(message.body) }
+  const copyLink = () => {
+    const kind = location.pathname.startsWith('/dm/') ? 'dm' : 'channel'
+    void navigator.clipboard.writeText(`${location.origin}/${kind}/${channelId}?message=${message.id}`)
+  }
 
   const isOwn = message.user_id === currentUserId
   const profile = message.profiles
@@ -165,7 +190,7 @@ export const Message = memo(function Message({
             {/* Attachments */}
             {attachments.length > 0 && (
               <div className="mt-2 flex flex-col gap-2">
-                {attachments.map((att) => <AttachmentCard key={att.id} attachment={att} />)}
+                {attachments.map((att) => <AttachmentCard key={att.id} attachment={att} showInlineImages={preferences.mediaPreview} showPreview={preferences.attachmentPreview} />)}
               </div>
             )}
 
@@ -267,6 +292,16 @@ export const Message = memo(function Message({
               </ActionBtn>
             )}
 
+            <ActionBtn label={saved ? 'Remove from saved' : 'Save message'} onClick={toggleSaved} active={saved}>
+              <Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />
+            </ActionBtn>
+            <ActionBtn label="Copy message text" onClick={copyText}>
+              <Copy size={13} />
+            </ActionBtn>
+            <ActionBtn label="Copy message link" onClick={copyLink}>
+              <Link2 size={13} />
+            </ActionBtn>
+
             {/* Edit — own messages */}
             {isOwn && (
               <ActionBtn label="Edit message" onClick={() => { setIsEditing(true); setEditBody(message.body ?? '') }}>
@@ -335,7 +370,7 @@ export const Message = memo(function Message({
   )
 })
 
-function ActionBtn({ label, onClick, children, danger }: { label: string; onClick?: () => void; children: React.ReactNode; danger?: boolean }) {
+function ActionBtn({ label, onClick, children, danger, active }: { label: string; onClick?: () => void; children: React.ReactNode; danger?: boolean; active?: boolean }) {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
@@ -344,7 +379,7 @@ function ActionBtn({ label, onClick, children, danger }: { label: string; onClic
           onClick={onClick}
           className={cn(
             'w-7 h-7 flex items-center justify-center rounded-lg transition-colors',
-            danger ? 'text-[#9CA3AF] hover:text-red-500 hover:bg-red-50' : 'text-[#9CA3AF] hover:text-[#111827] hover:bg-[#F3F4F6]'
+            danger ? 'text-[#9CA3AF] hover:text-red-500 hover:bg-red-50' : active ? 'bg-[var(--primary-soft)] text-[var(--primary)]' : 'text-[#9CA3AF] hover:text-[#111827] hover:bg-[#F3F4F6]'
           )}
         >
           {children}
@@ -385,7 +420,7 @@ function ImageAttachment({ url, attachment }: { url: string; attachment: Attachm
   )
 }
 
-function AttachmentCard({ attachment }: { attachment: Attachment }) {
+function AttachmentCard({ attachment, showInlineImages, showPreview }: { attachment: Attachment; showInlineImages: boolean; showPreview: boolean }) {
   const isImage = isImageMime(attachment.mime_type)
   const isAudio = attachment.mime_type?.startsWith('audio/')
   const { data: url, isLoading } = useSignedAttachmentUrl(attachment.object_key)
@@ -394,7 +429,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
     return <div className="w-64 h-14 bg-[#F3F4F6] animate-pulse rounded-xl" />
   }
 
-  if (isImage) {
+  if (isImage && showInlineImages && showPreview) {
     return <ImageAttachment url={url} attachment={attachment} />
   }
 

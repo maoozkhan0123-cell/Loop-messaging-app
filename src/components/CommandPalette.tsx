@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Command } from 'cmdk'
-import { Hash, Lock, Search, X } from 'lucide-react'
+import { Hash, Lock, Search, X, Home, Users, Files, Lightbulb, Kanban, Settings, Inbox, CalendarDays, ScanSearch, Plus } from 'lucide-react'
 import { useChannels } from '@/hooks/useChannels'
 import type { ChannelWithMember } from '@/types/database'
 import { Avatar } from '@/components/ui/Avatar'
@@ -19,6 +19,8 @@ export function CommandPalette() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        const target = e.target as HTMLElement | null
+        if (target?.matches('input, textarea, [contenteditable="true"]')) return
         e.preventDefault()
         setOpen((prev) => !prev)
       }
@@ -55,6 +57,23 @@ export function CommandPalette() {
     setQuery('')
   }
 
+  const navigateTo = (href: string) => {
+    router.push(href)
+    setOpen(false)
+    setQuery('')
+  }
+
+  const actions = [
+    { label: 'Home', href: '/dashboard', icon: Home },
+    { label: 'Inbox', href: '/inbox', icon: Inbox },
+    { label: 'Calendar', href: '/calendar', icon: CalendarDays },
+    { label: 'Team directory', href: '/people', icon: Users },
+    { label: 'Files', href: '/files', icon: Files },
+    { label: 'Projects', href: '/projects', icon: Kanban },
+    { label: 'Ideas', href: '/ideas', icon: Lightbulb },
+    { label: 'Create a task', href: '/projects?newTask=1', icon: Plus },
+  ].filter((action) => !query || action.label.toLowerCase().includes(query.toLowerCase()))
+
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
@@ -86,6 +105,26 @@ export function CommandPalette() {
               <Command.Empty className="py-8 text-center text-sm text-[#9CA3AF]">
                 No results for &quot;{query}&quot;
               </Command.Empty>
+
+              {actions.length > 0 && (
+                <Command.Group heading={<span className="px-4 py-1.5 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider block">Navigate</span>}>
+                  {actions.map(({ label, href, icon: Icon }) => (
+                    <Command.Item key={href} value={label} onSelect={() => navigateTo(href)} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
+                      <Icon size={15} className="text-[#6B7280]" /><span>{label}</span>
+                    </Command.Item>
+                  ))}
+                  {(!query || 'preferences settings'.includes(query.toLowerCase())) && (
+                    <Command.Item value="Preferences settings" onSelect={() => { setOpen(false); window.dispatchEvent(new Event('bysync:open-preferences')) }} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
+                      <Settings size={15} className="text-[#6B7280]" /><span>Open Preferences</span><kbd className="ml-auto text-[10px] text-[#9CA3AF]">Ctrl ,</kbd>
+                    </Command.Item>
+                  )}
+                  {(!query || 'search messages files people tasks'.includes(query.toLowerCase())) && (
+                    <Command.Item value="Search messages files people tasks" onSelect={() => { setOpen(false); window.dispatchEvent(new Event('open-global-search')) }} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
+                      <ScanSearch size={15} className="text-[#6B7280]"/><span>Search workspace</span><kbd className="ml-auto text-[10px] text-[#9CA3AF]">Ctrl F</kbd>
+                    </Command.Item>
+                  )}
+                </Command.Group>
+              )}
 
               {filteredPublic.length > 0 && (
                 <Command.Group

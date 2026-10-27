@@ -76,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <MobileNavContext.Provider
       value={{ mobileMenuOpen, setMobileMenuOpen, toggleMobileMenu, closeMobileMenu }}
     >
-      <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#2B3990' }}>
+      <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--app-bg)' }}>
         {/* ── Top toolbar: spans full width ── */}
         <Toolbar />
 
@@ -153,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
 
           {/* Main content area */}
-          <div className="flex flex-1 min-w-0 h-full bg-white md:rounded-tl-xl overflow-hidden shadow-xl">
+          <div className="flex flex-1 min-w-0 h-full bg-white md:rounded-tl-xl overflow-hidden border border-[var(--ui-border)] shadow-sm">
             {children}
           </div>
         </div>

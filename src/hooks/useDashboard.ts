@@ -2,7 +2,17 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import type { Idea, Profile, ProjectBoard, ProjectColumn, ProjectTask } from '@/types/database'
+import type { Idea, Profile, ProjectBoard, ProjectColumn, ProjectTask, TaskPriority } from '@/types/database'
+
+export type CreateDashboardTaskInput = {
+  boardId: string
+  columnId: string
+  title: string
+  description?: string
+  priority: TaskPriority
+  assigneeId?: string
+  dueDate: string
+}
 
 export type DashboardMessage = {
   id: string
@@ -68,9 +78,36 @@ export function useDashboard() {
     },
   })
 
+  const createTaskMutation = useMutation({
+    mutationFn: async (input: CreateDashboardTaskInput) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Your session has expired. Please sign in again.')
+      const currentTasks = dashboardQuery.data?.tasks.filter((task) => task.column_id === input.columnId) ?? []
+      const { data, error } = await supabase.from('project_tasks').insert({
+        board_id: input.boardId,
+        column_id: input.columnId,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        priority: input.priority,
+        assignee_id: input.assigneeId || null,
+        due_date: input.dueDate,
+        created_by: user.id,
+        position: currentTasks.length,
+      }).select().single()
+      if (error) throw error
+      return data as ProjectTask
+    },
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['project_tasks', task.board_id] })
+    },
+  })
+
   return {
     ...dashboardQuery,
     completeTask: completeTaskMutation.mutateAsync,
     isCompletingTask: completeTaskMutation.isPending,
+    createTask: createTaskMutation.mutateAsync,
+    isCreatingTask: createTaskMutation.isPending,
   }
 }

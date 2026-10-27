@@ -37,7 +37,9 @@ export function SearchOverlay() {
       }
     }
     document.addEventListener('keydown', down)
-    return () => document.removeEventListener('keydown', down)
+    const openSearch = () => setOpen(true)
+    window.addEventListener('open-global-search', openSearch)
+    return () => { document.removeEventListener('keydown', down); window.removeEventListener('open-global-search', openSearch) }
   }, [])
 
   const navigateToMessage = (msg: SearchResult) => {
@@ -60,7 +62,7 @@ export function SearchOverlay() {
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search messages..."
+              placeholder="Search workspace messages…"
               className="flex-1 py-4 text-sm focus:outline-none placeholder-[#9CA3AF]"
             />
             {query && (

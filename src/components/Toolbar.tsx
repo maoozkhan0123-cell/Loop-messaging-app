@@ -51,12 +51,6 @@ export function Toolbar() {
   // Ctrl+K → focus the inline search (not the modal)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        inputRef.current?.focus()
-        inputRef.current?.select()
-        setFocused(true)
-      }
       if (e.key === 'Escape' && focused) {
         setFocused(false)
         setQuery('')
@@ -165,7 +159,7 @@ export function Toolbar() {
       className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 px-2 sm:px-4 relative z-30"
       style={{
         height: 41,
-        background: 'linear-gradient(105deg, #202B75 0%, #2B3990 52%, #167EBA 100%)',
+        background: '#20234A',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}
     >
@@ -215,7 +209,7 @@ export function Toolbar() {
           />
           {!query && (
             <span className="text-[10px] text-white/28 flex-shrink-0 hidden sm:block select-none">
-              Ctrl K
+              Search
             </span>
           )}
         </div>

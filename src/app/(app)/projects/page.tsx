@@ -79,6 +79,16 @@ export default function ProjectsPage() {
     if (boardId && boardId !== selectedBoardId) setSelectedBoardId(boardId)
   }, [selectedBoardId])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('newTask') !== '1' || !activeBoardId || !columns[0]) return
+    setTargetColumnId(columns[0].id)
+    setShowNewTaskModal(true)
+    params.delete('newTask')
+    const next = params.toString()
+    router.replace(next ? `/projects?${next}` : '/projects', { scroll: false })
+  }, [activeBoardId, columns, router])
+
   // Filter tasks by search & priority
   const filteredTasks = tasks.filter((t) => {
     const matchesSearch =

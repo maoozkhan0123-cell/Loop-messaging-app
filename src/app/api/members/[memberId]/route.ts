@@ -51,7 +51,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ membe
 
     const displayName = String(body.displayName ?? '').trim()
     const jobTitle = String(body.jobTitle ?? '').trim() || 'Teammate'
-    const role = body.role === 'admin' ? 'admin' : 'member'
+    const role = ['admin', 'ceo'].includes(body.role) ? body.role : 'member'
     const channelIds = Array.isArray(body.channelIds) ? body.channelIds.map(String) : []
     if (displayName.length < 2) return NextResponse.json({ error: 'Enter the member’s full name.' }, { status: 400 })
     if (protectedAccount && role !== 'admin') return NextResponse.json({ error: 'The primary admin role cannot be removed.' }, { status: 400 })

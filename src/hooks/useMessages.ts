@@ -39,6 +39,17 @@ export function appendMessage(qc: ReturnType<typeof useQueryClient>, channelId: 
   })
 }
 
+// Update the root message summary when a thread reply arrives. A reply must never
+// be inserted into the root conversation feed as if it were a top-level message.
+export function bumpThreadReplyCount(qc: ReturnType<typeof useQueryClient>, channelId: string, rootMessageId: string) {
+  patchCache(qc, ['messages', channelId, null], (pages) =>
+    pages.map((page) => page.map((message) => message.id === rootMessageId
+      ? { ...message, reply_count: (message.reply_count ?? 0) + 1 }
+      : message
+    ))
+  )
+}
+
 // O(n) update — called on edit/delete
 function updateMessage(qc: ReturnType<typeof useQueryClient>, channelId: string, parentId: string | null, updatedMsg: Message) {
   const key = ['messages', channelId, parentId]

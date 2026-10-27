@@ -8,6 +8,7 @@ import { formatFileSize, isImageMime } from '@/lib/utils'
 
 interface FileUploadProps {
   channelId: string
+  destinationLabel: string
   files: File[]
   onClose: () => void
   onComplete: () => void
@@ -20,7 +21,7 @@ interface UploadState {
   error?: string
 }
 
-export function FileUpload({ channelId, files, onClose, onComplete }: FileUploadProps) {
+export function FileUpload({ channelId, destinationLabel, files, onClose, onComplete }: FileUploadProps) {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const [uploads, setUploads] = useState<UploadState[]>(
@@ -29,6 +30,7 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
   const [message, setMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [partialComplete, setPartialComplete] = useState(false)
 
   const handleUpload = async () => {
     setIsSubmitting(true)
@@ -53,10 +55,12 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
       if (msgError) throw new Error(msgError.message)
       if (!messageId) throw new Error('Message was not created')
 
+      let successfulUploads = 0
+      let failedUploads = 0
       // Upload each file to Storage then insert attachment record
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const objectKey = `${user.id}/${channelId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+        const objectKey = `${user.id}/${channelId}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
         setUploads((prev) =>
           prev.map((u, idx) => (idx === i ? { ...u, status: 'uploading' } : u))
@@ -67,6 +71,7 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
           .upload(objectKey, file, { upsert: false })
 
         if (uploadError) {
+          failedUploads += 1
           setUploads((prev) =>
             prev.map((u, idx) =>
               idx === i ? { ...u, status: 'error', error: uploadError.message } : u
@@ -85,6 +90,8 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
         })
 
         if (attachError) {
+          failedUploads += 1
+          await supabase.storage.from('attachments').remove([objectKey])
           setUploads((prev) =>
             prev.map((u, idx) =>
               idx === i ? { ...u, status: 'error', error: attachError.message } : u
@@ -93,12 +100,25 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
           continue
         }
 
+        successfulUploads += 1
+
         setUploads((prev) =>
           prev.map((u, idx) => (idx === i ? { ...u, status: 'done', progress: 100 } : u))
         )
       }
 
+      // Avoid leaving a blank message behind when every file failed.
+      if (successfulUploads === 0) {
+        await supabase.rpc('delete_message', { p_message_id: messageId })
+        throw new Error('No files were uploaded. Nothing was posted to the conversation.')
+      }
+
       queryClient.invalidateQueries({ queryKey: ['messages', channelId] })
+      if (failedUploads > 0) {
+        setSubmitError(`${successfulUploads} file${successfulUploads === 1 ? '' : 's'} uploaded, but ${failedUploads} failed. Close this window and try the failed files again.`)
+        setPartialComplete(true)
+        return
+      }
       onComplete()
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Upload failed')
@@ -118,6 +138,7 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
           <X size={14} />
         </button>
       </div>
+      <div className="border-b border-[#E5E7EB] bg-[#F7FAFC] px-3 py-2 text-xs text-[#475467]">Sharing in <strong className="text-[#101828]">{destinationLabel}</strong></div>
 
       {/* Error banner */}
       {submitError && (
@@ -164,15 +185,15 @@ export function FileUpload({ channelId, files, onClose, onComplete }: FileUpload
       <div className="flex justify-end gap-2 px-3 pb-3">
         <button
           type="button"
-          onClick={onClose}
+          onClick={partialComplete ? onComplete : onClose}
           className="px-3 h-7 text-xs border border-[#E5E7EB] rounded text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
         >
-          Cancel
+          {partialComplete ? 'Done' : 'Cancel'}
         </button>
         <button
           type="button"
           onClick={handleUpload}
-          disabled={isSubmitting}
+          disabled={isSubmitting || partialComplete}
           className="px-3 h-7 text-xs bg-[#3589FA] text-white rounded hover:bg-[#2558C7] transition-colors disabled:opacity-50 flex items-center gap-1.5"
         >
           {isSubmitting ? <><Loader2 size={12} className="animate-spin" /> Uploading...</> : <><Upload size={12} /> Upload</>}

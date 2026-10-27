@@ -184,12 +184,13 @@ export default function PeoplePage() {
   )
 }
 
-type MemberAccess = { id: string; email?: string; role: 'member' | 'admin'; suspended: boolean; lastSignInAt?: string; createdAt: string; channelIds: string[] }
+type WorkspaceRole = 'member' | 'admin' | 'ceo'
+type MemberAccess = { id: string; email?: string; role: WorkspaceRole; suspended: boolean; lastSignInAt?: string; createdAt: string; channelIds: string[] }
 
 function ManageMemberModal({ profile, access, channels, onClose, onChanged }: { profile: Profile; access?: MemberAccess; channels: Array<{ id: string; name: string | null }>; onClose: () => void; onChanged: () => void }) {
   const [displayName, setDisplayName] = useState(profile.display_name)
   const [jobTitle, setJobTitle] = useState(profile.job_title || 'Teammate')
-  const [role, setRole] = useState<'member' | 'admin'>(access?.role ?? 'member')
+  const [role, setRole] = useState<WorkspaceRole>(access?.role ?? 'member')
   const [channelIds, setChannelIds] = useState<string[]>(access?.channelIds ?? [])
   const [loading, setLoading] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -221,7 +222,7 @@ function ManageMemberModal({ profile, access, channels, onClose, onChanged }: { 
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
           {notice && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{notice}</div>}
           <div className="grid grid-cols-2 gap-3"><Field label="Full name"><input className="member-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></Field><Field label="Job title"><input className="member-input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} /></Field></div>
-          <Field label="Workspace role"><select className="member-input" value={role} onChange={(e) => setRole(e.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select></Field>
+          <Field label="Workspace role"><select className="member-input" value={role} onChange={(e) => setRole(e.target.value as WorkspaceRole)}><option value="member">Member</option><option value="admin">Admin</option><option value="ceo">CEO</option></select></Field>
           <Field label="Public channel access"><div className="grid grid-cols-2 gap-2 rounded-lg border border-[#E2E8F0] p-3">{channels.map((channel) => <label key={channel.id} className="flex items-center gap-2 text-sm text-[#475569]"><input type="checkbox" checked={channelIds.includes(channel.id)} onChange={(e) => setChannelIds((old) => e.target.checked ? [...old, channel.id] : old.filter((id) => id !== channel.id))} />#{channel.name}</label>)}</div></Field>
           <button onClick={() => void run('update')} disabled={Boolean(loading)} className="w-full h-10 rounded-lg bg-[#3589FA] text-sm font-semibold text-white disabled:opacity-60">{loading === 'update' ? 'Saving…' : 'Save member access'}</button>
           <div className="border-t border-[#E2E8F0] pt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -239,7 +240,7 @@ function AddMemberModal({ channels, onClose, onCreated }: { channels: Array<{ id
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [jobTitle, setJobTitle] = useState('Teammate')
-  const [accessRole, setAccessRole] = useState<'member' | 'admin'>('member')
+  const [accessRole, setAccessRole] = useState<WorkspaceRole>('member')
   const [channelIds, setChannelIds] = useState<string[]>(() => channels.map((channel) => channel.id))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -296,8 +297,8 @@ function AddMemberModal({ channels, onClose, onCreated }: { channels: Array<{ id
               <Field label="Work email"><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@bytechsol.com" className="member-input" /></Field>
               <Field label="Job title"><input required value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Software Engineer" className="member-input" /></Field>
               <Field label="Workspace access">
-                <select value={accessRole} onChange={(e) => setAccessRole(e.target.value as 'member' | 'admin')} className="member-input">
-                  <option value="member">Member</option><option value="admin">Admin</option>
+                <select value={accessRole} onChange={(e) => setAccessRole(e.target.value as WorkspaceRole)} className="member-input">
+                  <option value="member">Member</option><option value="admin">Admin</option><option value="ceo">CEO</option>
                 </select>
               </Field>
             </div>

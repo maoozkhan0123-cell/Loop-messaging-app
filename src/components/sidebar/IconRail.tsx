@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, MessagesSquare, FolderOpen, MoreHorizontal, Smile, X, Camera, Loader2, Bell, BellOff, Kanban, Lightbulb } from 'lucide-react'
+import { Home, MessagesSquare, FolderOpen, Smile, X, Camera, Loader2, Bell, BellOff, Kanban, Lightbulb, Hash, Users, Settings, Inbox, CalendarDays } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { Avatar } from '@/components/ui/Avatar'
 import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
@@ -11,6 +11,7 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useMobileNav } from '@/components/AppShell'
+import { PreferencesModal } from '@/components/PreferencesModal'
 
 interface IconRailProps {
   onOpenSidebar: () => void
@@ -26,8 +27,25 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [preferencesOpen, setPreferencesOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { enabled: notifEnabled, permission: notifPermission, toggle: toggleNotif } = useNotifications()
+
+  useEffect(() => {
+    const openPreferences = () => setPreferencesOpen(true)
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === ',') {
+        event.preventDefault()
+        setPreferencesOpen(true)
+      }
+    }
+    window.addEventListener('bysync:open-preferences', openPreferences)
+    window.addEventListener('keydown', handleShortcut)
+    return () => {
+      window.removeEventListener('bysync:open-preferences', openPreferences)
+      window.removeEventListener('keydown', handleShortcut)
+    }
+  }, [])
 
   const isHome = pathname === '/' || pathname === '/dashboard'
   const isDM = pathname.includes('/dm') || pathname.includes('/people')
@@ -79,7 +97,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
   return (
     <aside
       className="flex flex-col items-center flex-shrink-0 relative z-20 shadow-xl border-r border-white/10"
-      style={{ width: 70, background: 'linear-gradient(180deg, #141B57 0%, #202B75 55%, #17205F 100%)', height: '100%', paddingTop: 10, paddingBottom: 12 }}
+      style={{ width: 70, background: '#171936', height: '100%', paddingTop: 10, paddingBottom: 12 }}
     >
       {/* Workspace logo */}
       <button
@@ -95,11 +113,15 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
       {/* Nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
         <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
-        <RailBtn icon={MessagesSquare} label="DMs" isActive={isDM} onClick={() => { onOpenSidebar(); router.push('/people') }} />
+        <RailBtn icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />
+        <RailBtn icon={MessagesSquare} label="Messages" isActive={pathname.includes('/dm')} onClick={() => { onOpenSidebar(); router.push('/people') }} />
+        <RailBtn icon={Hash} label="Channels" isActive={pathname.includes('/channel')} onClick={() => { onOpenSidebar(); closeMobileMenu() }} />
+        <RailBtn icon={Users} label="Team" isActive={isDM && pathname === '/people'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/people') }} />
         <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/files') }} />
         <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/projects') }} />
+        <RailBtn icon={CalendarDays} label="Calendar" isActive={pathname === '/calendar'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/calendar') }} />
         <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/ideas') }} />
-        <RailBtn icon={MoreHorizontal} label="More" isActive={pathname === '/profile'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/profile') }} />
+        <RailBtn icon={Settings} label="Settings" onClick={() => setPreferencesOpen(true)} />
       </div>
 
       <div style={{ flex: 1 }} />
@@ -166,6 +188,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
                   <div className="font-bold text-[#1D1C1D] text-[15px] truncate leading-tight">
                     {profile.display_name}
                   </div>
+                  {profile.email && <div className="mt-0.5 truncate text-[11px] text-[#8A878A]">{profile.email}</div>}
                   <div className="flex items-center gap-1.5 text-[13px] text-[#6B7280] mt-0.5">
                     <span className="w-2 h-2 rounded-full" style={{ background: statusColor }} />
                     <span className="capitalize">{profile.status === 'away' ? 'Away' : 'Active'}</span>
@@ -220,7 +243,8 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
 
               <div className="px-1 py-1">
                 <MenuItem onClick={() => { setMenuOpen(false); router.push('/profile') }} label="Profile" />
-                <MenuItem onClick={() => { setMenuOpen(false); router.push('/profile#preferences') }} label="Preferences" />
+                <MenuItem onClick={() => { setMenuOpen(false); setPreferencesOpen(true) }} label="Preferences" />
+                <MenuItem onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('open-search')) }} label="Keyboard shortcuts & commands" rightLabel="Ctrl K" />
               </div>
 
               <div className="h-px bg-[#E5E7EB] my-1" />
@@ -239,6 +263,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
           </Popover.Portal>
         </Popover.Root>
       )}
+      <PreferencesModal open={preferencesOpen} onOpenChange={setPreferencesOpen} />
     </aside>
   )
 }

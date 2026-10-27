@@ -59,6 +59,69 @@ html, body {
   padding: 0;
 }
 
+:root {
+  --app-bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #f3f4f6;
+  --foreground: #17171a;
+  --muted-foreground: #667085;
+  --ui-border: #e2e5e9;
+  --primary: #5b5bd6;
+  --primary-hover: #4a4abd;
+  --primary-soft: #ededff;
+  --focus-ring: rgba(91, 91, 214, .28);
+  --success: #16a36a;
+  --warning: #d97706;
+  --danger: #dc3f4f;
+  --info: #2583d8;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, .06);
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, .10);
+  --motion-fast: 150ms;
+  --motion-normal: 200ms;
+}
+
+html[data-theme='dark'] {
+  --app-bg: #111318;
+  --surface: #171a20;
+  --surface-raised: #1e222a;
+  --surface-muted: #242933;
+  --foreground: #f4f5f7;
+  --muted-foreground: #aab1bd;
+  --ui-border: #303640;
+  --primary-soft: rgba(91, 91, 214, .18);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, .35);
+}
+
+html[data-accent='slate'] { --primary: #526071; --primary-hover: #3f4a58; --primary-soft: #edf1f5; --focus-ring: rgba(82, 96, 113, .28); }
+html[data-accent='midnight'] { --primary: #264a8a; --primary-hover: #1d3b70; --primary-soft: #eaf0fb; --focus-ring: rgba(38, 74, 138, .28); }
+html[data-accent='emerald'] { --primary: #168264; --primary-hover: #10684f; --primary-soft: #e8f6f1; --focus-ring: rgba(22, 130, 100, .28); }
+
+html[data-theme='dark'] body { background: var(--app-bg); color: var(--foreground); }
+html[data-theme='dark'] .bg-white { background-color: var(--surface); }
+html[data-theme='dark'] .text-\[\#111827\],
+html[data-theme='dark'] .text-\[\#1D1C1D\],
+html[data-theme='dark'] .text-\[\#1A1A2E\] { color: var(--foreground); }
+html[data-theme='dark'] .border-\[\#E5E7EB\],
+html[data-theme='dark'] .border-\[\#E8EAED\] { border-color: var(--ui-border); }
+
+html[data-density='compact'] .message-body { font-size: 13px; line-height: 1.35; }
+
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: .01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
 body {
   font-family: var(--font-ui);
   font-size: 13px;

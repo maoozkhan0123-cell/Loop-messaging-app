@@ -6,6 +6,9 @@ export type Profile = {
   job_title: string | null
   status: 'online' | 'away' | 'offline'
   created_at: string
+  department?: string | null
+  manager_id?: string | null
+  weekly_capacity_hours?: number | null
 }
 
 export type ChannelType = 'public' | 'private' | 'dm' | 'group_dm'
@@ -115,9 +118,26 @@ export type ProjectTask = {
   created_by: string | null
   position: number
   created_at: string
+  start_date?: string | null
+  estimated_hours?: number | null
+  blocked_reason?: string | null
+  archived_at?: string | null
+  version?: number
   assignee?: Profile
   creator?: Profile
   comments_count?: number
+}
+
+export type ProjectMilestone = {
+  id: string; board_id: string; title: string; description: string | null; target_date: string
+  owner_id: string | null; status: 'planned' | 'in_progress' | 'completed' | 'at_risk'; created_by: string | null; created_at: string
+}
+
+export type ProjectRisk = {
+  id: string; board_id: string; title: string; description: string | null
+  severity: 'low' | 'medium' | 'high' | 'critical'; probability: 'unlikely' | 'possible' | 'likely'
+  mitigation: string | null; owner_id: string | null; review_date: string | null
+  status: 'open' | 'mitigating' | 'resolved' | 'accepted'; created_by: string | null; created_at: string
 }
 
 export type ProjectTaskComment = {
@@ -127,6 +147,43 @@ export type ProjectTaskComment = {
   comment: string
   created_at: string
   profile?: Profile
+}
+
+export type WorkspaceEvent = {
+  id: string
+  title: string
+  description: string | null
+  starts_at: string
+  ends_at: string
+  location: string | null
+  meeting_url: string | null
+  recurrence: 'none' | 'daily' | 'weekly' | 'monthly'
+  created_by: string
+  created_at: string
+  creator?: Profile
+  attendee_count?: number
+  my_response?: 'pending' | 'accepted' | 'declined' | 'maybe'
+}
+
+export type ScheduledMessage = {
+  id: string
+  user_id: string
+  channel_id: string
+  parent_id: string | null
+  body: string
+  scheduled_for: string
+  status: 'pending' | 'sent' | 'cancelled' | 'failed'
+  created_at: string
+}
+
+export type TaskChecklistItem = {
+  id: string
+  task_id: string
+  label: string
+  completed: boolean
+  position: number
+  created_by: string | null
+  created_at: string
 }
 
 // ============================================================
@@ -153,5 +210,3 @@ export type IdeaComment = {
   created_at: string
   author?: Profile
 }
-
-

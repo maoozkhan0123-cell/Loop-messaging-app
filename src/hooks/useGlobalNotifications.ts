@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { getNotificationPref } from '@/lib/notifications'
-import { appendMessage, patchCache, profileCache, fetchProfile } from '@/hooks/useMessages'
+import { appendMessage, bumpThreadReplyCount, patchCache, profileCache, fetchProfile } from '@/hooks/useMessages'
 import type { Message } from '@/types/database'
 
 /**
@@ -68,7 +68,7 @@ export function useGlobalNotifications(
             }
 
             appendMessage(qc, row.channel_id, pid, fullMsg)
-            if (pid) appendMessage(qc, row.channel_id, null, fullMsg) // bump root thread list
+            if (pid) bumpThreadReplyCount(qc, row.channel_id, pid)
 
             // Patch profile in asynchronously if it wasn't in cache yet
             if (row.user_id && !cachedProfile) {
@@ -79,13 +79,6 @@ export function useGlobalNotifications(
                     page.map((m) => m.id === row.id ? { ...m, profiles: profile } : m)
                   )
                 )
-                if (pid) {
-                  patchCache(qc, ['messages', row.channel_id, null], (pages) =>
-                    pages.map((page) =>
-                      page.map((m) => m.id === row.id ? { ...m, profiles: profile } : m)
-                    )
-                  )
-                }
               })
             }
           }

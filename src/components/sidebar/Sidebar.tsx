@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { Hash, Lock, ChevronDown, Plus, Settings, SquarePen, Search, X } from 'lucide-react'
@@ -32,6 +32,18 @@ export function Sidebar() {
   const [newChannelName, setNewChannelName] = useState('')
   const [startingDM, setStartingDM] = useState<string | null>(null)
   const [sidebarSearch, setSidebarSearch] = useState('')
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('bysync.sidebar-sections') || '{}') as { channels?: boolean; dms?: boolean }
+      if (typeof saved.channels === 'boolean') setChannelsOpen(saved.channels)
+      if (typeof saved.dms === 'boolean') setDmsOpen(saved.dms)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try { localStorage.setItem('bysync.sidebar-sections', JSON.stringify({ channels: channelsOpen, dms: dmsOpen })) } catch {}
+  }, [channelsOpen, dmsOpen])
 
   const publicChannels = useMemo(() => channels?.filter((c) => c.type === 'public' || c.type === 'private') ?? [], [channels])
   const dmChannels = useMemo(() => channels?.filter((c) => c.type === 'dm' || c.type === 'group_dm') ?? [], [channels])
@@ -88,7 +100,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="flex flex-col h-full border-r border-white/10" style={{ background: 'linear-gradient(180deg, #202B75 0%, #253485 45%, #182365 100%)', width: 260 }}>
+    <div className="flex flex-col h-full border-r border-white/10" style={{ background: '#20234A', width: 260 }}>
 
       {/* ── Workspace header ── */}
       <div
@@ -100,7 +112,7 @@ export function Sidebar() {
           <ChevronDown size={14} className="text-white/60 flex-shrink-0" />
         </button>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => router.push('/profile')} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="Profile settings">
+          <button type="button" onClick={() => window.dispatchEvent(new Event('bysync:open-preferences'))} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="Preferences">
             <Settings size={15} style={{ color: TEXT_MUTED }} />
           </button>
           <button type="button" onClick={() => router.push('/people')} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors" title="New message">

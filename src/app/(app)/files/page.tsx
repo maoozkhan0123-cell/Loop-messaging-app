@@ -12,6 +12,14 @@ import { useRouter } from 'next/navigation'
 
 type FilterType = 'all' | 'images' | 'documents' | 'other'
 
+function channelLabel(channel: { type: string; name?: string | null; other_member?: unknown }) {
+  if (channel.type === 'dm' || channel.type === 'group_dm') {
+    const member = channel.other_member as { display_name?: string } | undefined
+    return `DM — ${member?.display_name ?? 'Unknown member'}`
+  }
+  return `# ${channel.name}`
+}
+
 export default function FilesPage() {
   const { data: files, isLoading, isError, error, refetch, isFetching } = useMyFiles()
   const router = useRouter()
@@ -23,7 +31,8 @@ export default function FilesPage() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const availableChannels = channels.filter((channel) => !channel.archived_at)
-  const effectiveUploadChannelId = uploadChannelId || availableChannels[0]?.id || ''
+  // Never silently choose the first channel: users must explicitly pick where a file is shared.
+  const selectedUploadChannel = availableChannels.find((channel) => channel.id === uploadChannelId)
 
   const filtered = (files ?? []).filter((f) => {
     const isImg = isImageMime(f.mime_type)
@@ -65,11 +74,12 @@ export default function FilesPage() {
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div><h1 className="text-[20px] sm:text-[22px] font-bold text-[#101828]">Files</h1><p className="mt-0.5 text-xs text-[#667085]">Browse and share files across your workspace.</p></div>
           <div className="flex items-center gap-2">
-            <select value={effectiveUploadChannelId} onChange={(event) => setUploadChannelId(event.target.value)} className="h-9 min-w-0 max-w-44 rounded-lg border border-[#D6E2EC] bg-white px-2.5 text-xs text-[#344054] outline-none focus:border-[#289ED8]" aria-label="Upload destination">
-              {availableChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.type === 'dm' || channel.type === 'group_dm' ? 'Direct message' : `# ${channel.name}`}</option>)}
+            <select value={uploadChannelId} onChange={(event) => setUploadChannelId(event.target.value)} className="h-9 min-w-0 max-w-52 rounded-lg border border-[#D6E2EC] bg-white px-2.5 text-xs text-[#344054] outline-none focus:border-[#289ED8]" aria-label="Upload destination">
+              <option value="" disabled>Select destination…</option>
+              {availableChannels.map((channel) => <option key={channel.id} value={channel.id}>{channelLabel(channel)}</option>)}
             </select>
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => { setPendingFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = '' }} />
-            <button type="button" disabled={!effectiveUploadChannelId} onClick={() => fileInputRef.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-[#2B3990] to-[#289ED8] px-3.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"><Upload size={14} /> Upload</button>
+            <button type="button" disabled={!selectedUploadChannel} onClick={() => fileInputRef.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--primary)] px-3.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"><Upload size={14} /> Upload</button>
           </div>
         </div>
 
@@ -210,10 +220,10 @@ export default function FilesPage() {
         </div>
       )}
 
-      {pendingFiles.length > 0 && effectiveUploadChannelId && (
+      {pendingFiles.length > 0 && selectedUploadChannel && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#101828]/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingFiles([]) }}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-2 shadow-2xl">
-            <FileUpload channelId={effectiveUploadChannelId} files={pendingFiles} onClose={() => setPendingFiles([])} onComplete={() => { setPendingFiles([]); void refetch() }} />
+            <FileUpload channelId={selectedUploadChannel.id} destinationLabel={channelLabel(selectedUploadChannel)} files={pendingFiles} onClose={() => setPendingFiles([])} onComplete={() => { setPendingFiles([]); void refetch() }} />
           </div>
         </div>
       )}

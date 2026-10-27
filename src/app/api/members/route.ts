@@ -26,7 +26,7 @@ export async function GET() {
     return NextResponse.json({ members: data.users.map((member) => ({
       id: member.id,
       email: member.email,
-      role: member.app_metadata?.role === 'admin' ? 'admin' : 'member',
+      role: ['admin', 'ceo'].includes(member.app_metadata?.role) ? member.app_metadata.role : 'member',
       suspended: Boolean(member.banned_until && new Date(member.banned_until) > new Date()),
       lastSignInAt: member.last_sign_in_at,
       createdAt: member.created_at,
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const displayName = String(body.displayName ?? '').trim()
     const email = String(body.email ?? '').trim().toLowerCase()
     const jobTitle = String(body.jobTitle ?? 'Teammate').trim() || 'Teammate'
-    const accessRole = body.accessRole === 'admin' ? 'admin' : 'member'
+    const accessRole = ['admin', 'ceo'].includes(body.accessRole) ? body.accessRole : 'member'
     const requestedChannelIds = Array.isArray(body.channelIds) ? body.channelIds.map(String) : []
 
     if (displayName.length < 2) {
