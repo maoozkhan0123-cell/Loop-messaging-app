@@ -111,7 +111,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
       </button>
 
       {/* Nav items */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
+      <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none]" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
         <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
         <RailBtn icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />
         <RailBtn icon={MessagesSquare} label="Messages" isActive={pathname.includes('/dm')} onClick={() => { onOpenSidebar(); router.push('/people') }} />
@@ -123,8 +123,6 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
         <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/ideas') }} />
         <RailBtn icon={Settings} label="Settings" onClick={() => setPreferencesOpen(true)} />
       </div>
-
-      <div style={{ flex: 1 }} />
 
       {/* Avatar upload input (hidden) */}
       <input
@@ -289,19 +287,19 @@ function RailBtn({ icon: Icon, label, isActive, onClick }: { icon: React.Compone
     <button
       type="button"
       onClick={onClick}
-      style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 0', gap: 3, cursor: 'pointer', background: 'none', border: 'none' }}
+      style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 0', gap: 2, cursor: 'pointer', background: 'none', border: 'none' }}
       className="group"
     >
       <span
         style={{
-          width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: isActive ? 'linear-gradient(135deg, #289ED8, #27AAE1)' : 'transparent',
           boxShadow: isActive ? '0 6px 16px rgba(40,158,216,0.35)' : 'none',
           transition: 'all 0.15s ease',
         }}
         className={cn(!isActive && 'group-hover:bg-white/15')}
       >
-        <Icon size={20} className={cn('transition-all group-hover:scale-110', isActive ? 'text-white' : 'text-blue-100/65 group-hover:text-white')} />
+        <Icon size={18} className={cn('transition-all group-hover:scale-110', isActive ? 'text-white' : 'text-blue-100/65 group-hover:text-white')} />
       </span>
       <span
         style={{ fontSize: 10, lineHeight: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}
