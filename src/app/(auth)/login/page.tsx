@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [magicSent, setMagicSent] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
   const [resetSent, setResetSent] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleEmailContinue = (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,9 +74,9 @@ export default function LoginPage() {
           <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: '#EBF5FF' }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3589FA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
           </div>
-          <h2 className="text-[22px] font-bold text-[#1D1C1D] mb-2">Check your email</h2>
-          <p className="text-[15px] text-[#616061] mb-6">
-            We sent a magic link to <strong className="text-[#1D1C1D]">{email}</strong>
+          <h2 className="mb-2 text-[22px] font-bold text-[var(--foreground)]">Check your email</h2>
+          <p className="mb-6 text-[15px] text-[var(--muted-foreground)]">
+            We sent a magic link to <strong className="text-[var(--foreground)]">{email}</strong>
           </p>
           <button
             type="button"
@@ -94,10 +95,10 @@ export default function LoginPage() {
     <PageShell>
       {step === 'email' ? (
         <>
-          <h1 className="text-[28px] font-black text-[#1D1C1D] text-center leading-tight mb-2">
+          <h1 className="mb-2 text-center text-[28px] font-black leading-tight text-[var(--foreground)]">
             Enter your email address<br />to sign in
           </h1>
-          <p className="text-[15px] text-[#616061] text-center mb-7">
+          <p className="mb-7 text-center text-[15px] text-[var(--muted-foreground)]">
             Or choose another way to sign in.
           </p>
 
@@ -115,34 +116,34 @@ export default function LoginPage() {
               placeholder="name@work-email.com"
               required
               autoFocus
-              className="w-full h-[44px] px-4 text-[15px] border border-[#DDDDDD] rounded-md focus:outline-none focus:ring-2 focus:ring-[#1264A3] focus:border-transparent placeholder-[#AAAAAA] text-[#1D1C1D]"
+              className="h-11 w-full rounded-lg border border-[var(--ui-border)] bg-[var(--surface)] px-4 text-[15px] text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus-ring)]"
             />
             <button
               type="submit"
               className="w-full h-[44px] text-white text-[15px] font-bold rounded-md transition-opacity hover:opacity-90"
-              style={{ background: '#3589FA' }}
+              style={{ background: 'var(--primary)' }}
             >
               Sign in with email
             </button>
           </form>
 
           <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-[#DDDDDD]" />
-            <span className="text-[11px] font-semibold text-[#616061] tracking-widest">OR SIGN IN WITH</span>
-            <div className="flex-1 h-px bg-[#DDDDDD]" />
+            <div className="h-px flex-1 bg-[var(--ui-border)]" />
+            <span className="text-[11px] font-semibold tracking-widest text-[var(--muted-foreground)]">OR SIGN IN WITH</span>
+            <div className="h-px flex-1 bg-[var(--ui-border)]" />
           </div>
 
           <button
             type="button"
             onClick={handleMagicLink}
             disabled={magicLoading || !email.trim()}
-            className="w-full flex items-center justify-center gap-2 h-[44px] border border-[#DDDDDD] rounded-md text-[14px] font-medium text-[#1D1C1D] hover:bg-[#F8F8F8] transition-colors disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--ui-border)] text-[14px] font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--surface-muted)] disabled:opacity-60"
           >
             {magicLoading && <Loader2 size={16} className="animate-spin" />}
             Email me a magic link
           </button>
 
-          <p className="text-center text-[13px] text-[#616061] mt-7">
+          <p className="mt-7 text-center text-[13px] text-[var(--muted-foreground)]">
             Having trouble?{' '}
             <Link href="/signup" className="font-medium hover:underline" style={{ color: '#1264A3' }}>
               Create an account
@@ -161,9 +162,9 @@ export default function LoginPage() {
             Back
           </button>
 
-          <h1 className="text-[26px] font-black text-[#000000] mb-1">Sign in to BySync</h1>
-          <p className="text-[14px] text-[#616061] mb-6">
-            Signing in as <strong className="text-[#000000]">{email}</strong>
+          <h1 className="mb-1 text-[26px] font-black text-[var(--foreground)]">Sign in to BySync</h1>
+          <p className="mb-6 text-[14px] text-[var(--muted-foreground)]">
+            Signing in as <strong className="text-[var(--foreground)]">{email}</strong>
           </p>
 
           {error && (
@@ -174,22 +175,25 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-3">
             <div>
-              <div className="flex items-center justify-between mb-1.5"><label className="block text-[13px] font-semibold text-[#000000]">Password</label><button type="button" onClick={handleForgotPassword} disabled={resetLoading} className="text-xs font-semibold text-[#1264A3] hover:underline disabled:opacity-60">{resetLoading ? 'Sending…' : 'Forgot password?'}</button></div>
+              <div className="mb-1.5 flex items-center justify-between"><label className="block text-[13px] font-semibold text-[var(--foreground)]">Password</label><button type="button" onClick={handleForgotPassword} disabled={resetLoading} className="text-xs font-semibold text-[var(--primary)] hover:underline disabled:opacity-60">{resetLoading ? 'Sending…' : 'Forgot password?'}</button></div>
+              <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
                 autoFocus
-                className="w-full h-[44px] px-4 text-[15px] border border-[#DDDDDD] rounded-md focus:outline-none focus:ring-2 focus:ring-[#000000] focus:border-transparent text-[#000000]"
+                className="h-11 w-full rounded-lg border border-[var(--ui-border)] bg-[var(--surface)] px-4 pr-11 text-[15px] text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus-ring)]"
               />
+              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+              </div>
             </div>
             <button
               type="submit"
               disabled={loading}
               className="w-full h-[44px] text-white text-[15px] font-bold rounded-md transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background: '#000000' }}
+              style={{ background: 'var(--primary)' }}
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
               Sign in
@@ -199,24 +203,24 @@ export default function LoginPage() {
           {resetSent && <div className="mt-3 text-[13px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">Password reset link sent. Please check your email.</div>}
 
           <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-[#DDDDDD]" />
-            <span className="text-[11px] font-semibold text-[#616061] tracking-widest">OR</span>
-            <div className="flex-1 h-px bg-[#DDDDDD]" />
+            <div className="h-px flex-1 bg-[var(--ui-border)]" />
+            <span className="text-[11px] font-semibold tracking-widest text-[var(--muted-foreground)]">OR</span>
+            <div className="h-px flex-1 bg-[var(--ui-border)]" />
           </div>
 
           <button
             type="button"
             onClick={handleMagicLink}
             disabled={magicLoading}
-            className="w-full h-[44px] border border-[#DDDDDD] rounded-md text-[14px] font-medium text-[#000000] hover:bg-[#F8F8F8] transition-colors disabled:opacity-60 flex items-center justify-center gap-2 mb-4"
+            className="mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--ui-border)] text-[14px] font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--surface-muted)] disabled:opacity-60"
           >
             {magicLoading && <Loader2 size={14} className="animate-spin" />}
             Send a magic link instead
           </button>
 
-          <p className="text-center text-xs text-[#616061] mt-4">
+          <p className="mt-4 text-center text-xs text-[var(--muted-foreground)]">
             Don&apos;t have an account?{' '}
-            <Link href="/signup" className="font-bold text-[#000000] hover:underline">
+            <Link href="/signup" className="font-bold text-[var(--foreground)] hover:underline">
               Create account
             </Link>
           </p>
@@ -228,15 +232,17 @@ export default function LoginPage() {
 
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-white">
-      <div className="w-full max-w-[400px]">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--app-bg)] px-4 py-8">
+      <main className="w-full max-w-[430px] rounded-2xl border border-[var(--ui-border)] bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-md)] sm:p-8">
         {/* BySync logo */}
-        <div className="flex justify-center mb-8">
-          <Image src="/bysync.svg" alt="BySync" width={220} height={71} priority />
+        <div className="mb-8 flex justify-center">
+          <span className="inline-flex rounded-xl bg-white px-3 py-1.5 shadow-sm">
+            <Image src="/bysync.svg" alt="BySync" width={200} height={64} priority />
+          </span>
         </div>
 
         {children}
-      </div>
+      </main>
     </div>
   )
 }
