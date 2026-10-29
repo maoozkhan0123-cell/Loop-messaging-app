@@ -16,6 +16,7 @@ import {
   User,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { GanttChart, ViewSwitcher, type WorkView } from '@/components/ui/WorkViews'
 import { useProjects, useTaskComments } from '@/hooks/useProjects'
 import { useAllProfiles } from '@/hooks/useProfiles'
 import { useProfile } from '@/hooks/useProfile'
@@ -73,6 +74,7 @@ export default function ProjectsPage() {
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
+  const [workView, setWorkView] = useState<WorkView>('board')
 
   useEffect(() => {
     const boardId = new URLSearchParams(window.location.search).get('board')
@@ -221,6 +223,8 @@ export default function ProjectsPage() {
             </select>
           </div>
 
+          <ViewSwitcher value={workView} onChange={setWorkView} includeBoard />
+
           {/* New Board Button */}
           <button
             type="button"
@@ -271,6 +275,14 @@ export default function ProjectsPage() {
               <Plus size={16} /> Create First Board
             </button>
           </div>
+        ) : workView === 'list' ? (
+          <div className="h-full overflow-y-auto rounded-xl border border-[var(--ui-border)] bg-[var(--surface)]">
+            <div className="grid min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] border-b border-[var(--ui-border)] bg-[var(--surface-raised)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]"><span>Task</span><span>Status</span><span>Priority</span><span>Assignee</span><span>Due</span></div>
+            {filteredTasks.map((task) => <button key={task.id} type="button" onClick={() => setSelectedTask(task)} className="grid w-full min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] items-center border-b border-[var(--ui-border)] px-4 py-3 text-left last:border-b-0 hover:bg-[var(--surface-muted)]"><span className="min-w-0"><strong className="block truncate text-xs">{task.title}</strong><span className="block truncate text-[10px] text-[var(--muted-foreground)]">{task.description || 'No description'}</span></span><span className="text-xs text-[var(--muted-foreground)]">{columns.find((column) => column.id === task.column_id)?.name || 'Unknown'}</span><span><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: PRIORITY_CONFIG[task.priority].bg, color: PRIORITY_CONFIG[task.priority].text }}>{PRIORITY_CONFIG[task.priority].label}</span></span><span className="flex items-center gap-2 text-xs">{task.assignee ? <><Avatar src={task.assignee.avatar_url} name={task.assignee.display_name} size={24}/><span className="truncate">{task.assignee.display_name}</span></> : <span className="text-[var(--muted-foreground)]">Unassigned</span>}</span><span className="text-xs text-[var(--muted-foreground)]">{task.due_date ? new Date(task.due_date).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '—'}</span></button>)}
+            {!filteredTasks.length && <div className="grid min-h-48 place-items-center text-sm text-[var(--muted-foreground)]">No tasks match your filters.</div>}
+          </div>
+        ) : workView === 'gantt' ? (
+          <GanttChart items={filteredTasks.map((task) => ({ id: task.id, title: task.title, subtitle: columns.find((column) => column.id === task.column_id)?.name, start: task.start_date || task.created_at, end: task.due_date || task.start_date || task.created_at, color: PRIORITY_CONFIG[task.priority].text, onClick: () => setSelectedTask(task) }))} emptyText="Add tasks to see the project timeline." />
         ) : (
           /* Kanban Board Columns */
           <div className="h-full flex items-start gap-4 sm:gap-5 pb-4">

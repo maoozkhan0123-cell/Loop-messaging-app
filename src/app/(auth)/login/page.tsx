@@ -120,7 +120,7 @@ export default function LoginPage() {
             />
             <button
               type="submit"
-              className="w-full h-[44px] text-white text-[15px] font-bold rounded-md transition-opacity hover:opacity-90"
+              className="auth-primary-button w-full h-[44px] text-white text-[15px] font-bold rounded-md transition-opacity hover:opacity-90"
               style={{ background: 'var(--primary)' }}
             >
               Sign in with email
@@ -137,7 +137,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleMagicLink}
             disabled={magicLoading || !email.trim()}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--ui-border)] text-[14px] font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--surface-muted)] disabled:opacity-60"
+            className="auth-secondary-button flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--ui-border)] text-[14px] font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--surface-muted)] disabled:opacity-60"
           >
             {magicLoading && <Loader2 size={16} className="animate-spin" />}
             Email me a magic link
@@ -192,7 +192,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-[44px] text-white text-[15px] font-bold rounded-md transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
+              className="auth-primary-button w-full h-[44px] text-white text-[15px] font-bold rounded-md transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
               style={{ background: 'var(--primary)' }}
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
@@ -212,7 +212,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleMagicLink}
             disabled={magicLoading}
-            className="mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--ui-border)] text-[14px] font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--surface-muted)] disabled:opacity-60"
+            className="auth-secondary-button mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--ui-border)] text-[14px] font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--surface-muted)] disabled:opacity-60"
           >
             {magicLoading && <Loader2 size={14} className="animate-spin" />}
             Send a magic link instead
@@ -232,8 +232,8 @@ export default function LoginPage() {
 
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--app-bg)] px-4 py-8">
-      <main className="w-full max-w-[430px] rounded-2xl border border-[var(--ui-border)] bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-md)] sm:p-8">
+    <div className="auth-page flex min-h-screen flex-col items-center justify-center bg-[var(--app-bg)] px-4 py-8">
+      <main className="auth-card w-full max-w-[430px] rounded-2xl border border-[var(--ui-border)] bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-md)] sm:p-8">
         {/* BySync logo */}
         <div className="mb-8 flex justify-center">
           <span className="inline-flex rounded-xl bg-white px-3 py-1.5 shadow-sm">

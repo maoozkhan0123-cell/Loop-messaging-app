@@ -109,6 +109,75 @@ html[data-theme='dark'] .text-\[\#1A1A2E\] { color: var(--foreground); }
 html[data-theme='dark'] .border-\[\#E5E7EB\],
 html[data-theme='dark'] .border-\[\#E8EAED\] { border-color: var(--ui-border); }
 
+/* Critical surfaces use explicit component styles so browser defaults can never
+   turn controls black-on-dark while the saved theme is hydrating. */
+.auth-page {
+  background: var(--app-bg);
+  color: var(--foreground);
+}
+
+.auth-card {
+  background: var(--surface-raised);
+  border-color: var(--ui-border);
+  color: var(--foreground);
+}
+
+.auth-card h1,
+.auth-card h2,
+.auth-card label,
+.auth-card strong {
+  color: var(--foreground);
+}
+
+.auth-card input {
+  background: var(--surface);
+  border-color: var(--ui-border);
+  color: var(--foreground);
+}
+
+.auth-primary-button {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+
+.auth-primary-button:hover { background: var(--primary-hover) !important; }
+
+.auth-secondary-button {
+  background: transparent;
+  border-color: var(--ui-border);
+  color: var(--foreground) !important;
+}
+
+.auth-secondary-button:hover { background: var(--surface-muted); }
+
+.preferences-modal,
+.preferences-modal main,
+.preferences-modal section {
+  background-color: var(--surface);
+  color: var(--foreground);
+}
+
+.preferences-modal nav button:not([aria-current='page']) {
+  color: var(--foreground) !important;
+}
+
+.preferences-modal nav button:not([aria-current='page']):hover {
+  background: var(--surface-muted);
+}
+
+.preferences-modal nav button[aria-current='page'] {
+  background: var(--primary);
+  color: #fff !important;
+}
+
+.preferences-modal input[type='time'],
+.preferences-modal select {
+  background: var(--surface-raised);
+  border-color: var(--ui-border);
+  color: var(--foreground);
+  color-scheme: inherit;
+}
+
 html[data-density='compact'] .message-body { font-size: 13px; line-height: 1.35; }
 
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {

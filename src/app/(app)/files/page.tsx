@@ -9,6 +9,7 @@ import { FileUpload } from '@/components/files/FileUpload'
 import { isImageMime, formatFileSize, cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
+import { GanttChart, ViewSwitcher, type WorkView } from '@/components/ui/WorkViews'
 
 type FilterType = 'all' | 'images' | 'documents' | 'other'
 
@@ -29,6 +30,7 @@ export default function FilesPage() {
   const [search, setSearch] = useState('')
   const [uploadChannelId, setUploadChannelId] = useState('')
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [workView, setWorkView] = useState<WorkView>('list')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const availableChannels = channels.filter((channel) => !channel.archived_at)
   // Never silently choose the first channel: users must explicitly pick where a file is shared.
@@ -113,7 +115,7 @@ export default function FilesPage() {
       </div>
 
       {/* Search bar */}
-      <div className="px-4 sm:px-6 py-3 border-b border-[#F3F4F6] flex-shrink-0">
+      <div className="px-4 sm:px-6 py-3 border-b border-[#F3F4F6] flex-shrink-0 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] max-w-sm focus-within:border-[#3589FA] focus-within:bg-white transition-colors">
           <Search size={14} className="text-[#9CA3AF] flex-shrink-0" />
           <input
@@ -128,6 +130,7 @@ export default function FilesPage() {
             </button>
           )}
         </div>
+        <ViewSwitcher value={workView} onChange={setWorkView} />
       </div>
 
       {/* Content */}
@@ -149,6 +152,11 @@ export default function FilesPage() {
             </p>
             {!search && <button type="button" onClick={() => router.push('/people')} className="mt-4 h-9 px-4 rounded-lg bg-[#3589FA] text-white text-sm font-semibold">Open a conversation</button>}
           </div>
+        </div>
+      ) : workView === 'gantt' ? (
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+          <div className="mb-3"><p className="text-sm font-semibold text-[var(--foreground)]">File activity timeline</p><p className="text-[11px] text-[var(--muted-foreground)]">Files arranged by the date they were shared.</p></div>
+          <GanttChart items={filtered.map((file) => ({ id: file.id, title: file.file_name, subtitle: `${file.uploader_name || 'Team member'}${file.channel_name ? ` · ${file.channel_name}` : ''}`, start: file.message_created_at, end: file.message_created_at, color: isImageMime(file.mime_type) ? '#8B5CF6' : '#289ED8', onClick: () => { if (file.signed_url) window.open(file.signed_url, '_blank', 'noopener,noreferrer') } }))} emptyText="No file activity to show." />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
