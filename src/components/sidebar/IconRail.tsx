@@ -48,7 +48,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
   }, [])
 
   const isHome = pathname === '/' || pathname === '/dashboard'
-  const isDM = pathname.includes('/dm') || pathname.includes('/people')
+  const isMessages = pathname === '/messages' || pathname.startsWith('/dm/')
 
   const statusColor =
     profile?.status === 'online' ? '#36D7AE'
@@ -114,9 +114,9 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
       <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none]" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
         <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
         <RailBtn icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />
-        <RailBtn icon={MessagesSquare} label="Messages" isActive={pathname.includes('/dm')} onClick={() => { onOpenSidebar(); router.push('/people') }} />
+        <RailBtn icon={MessagesSquare} label="Messages" isActive={isMessages} onClick={() => { onOpenSidebar(); router.push('/messages') }} />
         <RailBtn icon={Hash} label="Channels" isActive={pathname.includes('/channel')} onClick={() => { onOpenSidebar(); closeMobileMenu() }} />
-        <RailBtn icon={Users} label="Team" isActive={isDM && pathname === '/people'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/people') }} />
+        <RailBtn icon={Users} label="Team" isActive={pathname === '/people'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/people') }} />
         <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/files') }} />
         <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/projects') }} />
         <RailBtn icon={CalendarDays} label="Calendar" isActive={pathname === '/calendar'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/calendar') }} />

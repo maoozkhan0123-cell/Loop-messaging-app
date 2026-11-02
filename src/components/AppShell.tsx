@@ -30,7 +30,7 @@ export const useMobileNav = () => useContext(MobileNavContext)
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isMessagingRoute = pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people'
+  const isMessagingRoute = pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people'
   const [sidebarOpen, setSidebarOpen] = useState(isMessagingRoute)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { data: myProfile } = useProfile()
@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Auto-close mobile navigation drawer on route change
   useEffect(() => {
     setMobileMenuOpen(false)
-    setSidebarOpen(pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people')
+    setSidebarOpen(pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people')
   }, [pathname])
 
   // Stable channel ID list — used by global notification subscription.
