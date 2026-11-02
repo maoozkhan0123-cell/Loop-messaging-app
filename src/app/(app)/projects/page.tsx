@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Kanban,
   Plus,
@@ -11,16 +11,16 @@ import {
   MessageSquare,
   ChevronRight,
   ChevronLeft,
-  Trash2,
   X,
   User,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { GanttChart, ViewSwitcher, type WorkView } from '@/components/ui/WorkViews'
 import { useProjects, useTaskComments } from '@/hooks/useProjects'
+import { TaskDetailModal as EnterpriseTaskDetailModal } from '@/components/task-details/TaskDetailModal'
 import { useAllProfiles } from '@/hooks/useProfiles'
 import { useProfile } from '@/hooks/useProfile'
-import type { ProjectTask, TaskPriority, Profile } from '@/types/database'
+import type { ProjectTask, TaskPriority } from '@/types/database'
 
 const PRIORITY_CONFIG: Record<
   TaskPriority,
@@ -33,18 +33,40 @@ const PRIORITY_CONFIG: Record<
 }
 
 export default function ProjectsPage() {
+  return (
+    <Suspense
+      fallback={(
+        <div className="flex h-full flex-1 items-center justify-center bg-[#FAFAFA] text-sm text-[#71717A]">
+          Loading project board...
+        </div>
+      )}
+    >
+      <ProjectsPageContent />
+    </Suspense>
+  )
+}
+
+function ProjectsPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryString = searchParams.toString()
+  const urlBoardId = searchParams.get('board')
+  const urlTaskId = searchParams.get('task')
+  const newTaskRequested = searchParams.get('newTask') === '1'
   const [selectedBoardId, setSelectedBoardId] = useState<string | undefined>(undefined)
   const {
     boards,
     activeBoardId,
     columns,
     tasks,
+    workspaceTasks,
+    workspaceColumns,
     isLoading,
     createBoard,
     createColumn,
     createTask,
     moveTask,
+    moveTaskToBoard,
     updateTask,
     deleteTask,
     addTaskComment
@@ -70,6 +92,7 @@ export default function ProjectsPage() {
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>('')
 
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null)
+  const { data: existingTaskComments = [] } = useTaskComments(selectedTask?.id)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -77,19 +100,18 @@ export default function ProjectsPage() {
   const [workView, setWorkView] = useState<WorkView>('board')
 
   useEffect(() => {
-    const boardId = new URLSearchParams(window.location.search).get('board')
-    if (boardId && boardId !== selectedBoardId) setSelectedBoardId(boardId)
-  }, [selectedBoardId])
+    if (urlBoardId && urlBoardId !== selectedBoardId) setSelectedBoardId(urlBoardId)
+  }, [selectedBoardId, urlBoardId])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('newTask') !== '1' || !activeBoardId || !columns[0]) return
+    if (!newTaskRequested || !activeBoardId || !columns[0]) return
+    const params = new URLSearchParams(queryString)
     setTargetColumnId(columns[0].id)
     setShowNewTaskModal(true)
     params.delete('newTask')
     const next = params.toString()
     router.replace(next ? `/projects?${next}` : '/projects', { scroll: false })
-  }, [activeBoardId, columns, router])
+  }, [activeBoardId, columns, newTaskRequested, queryString, router])
 
   // Filter tasks by search & priority
   const filteredTasks = tasks.filter((t) => {
@@ -100,12 +122,23 @@ export default function ProjectsPage() {
     return matchesSearch && matchesPriority
   })
 
+  const handleBoardChange = (boardId: string) => {
+    setSelectedBoardId(boardId || undefined)
+    setSelectedTask(null)
+    const params = new URLSearchParams(queryString)
+    if (boardId) params.set('board', boardId)
+    else params.delete('board')
+    params.delete('task')
+    const next = params.toString()
+    router.push(next ? `/projects?${next}` : '/projects', { scroll: false })
+  }
+
   // Handlers
   const handleCreateBoard = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newBoardName.trim()) return
     const board = await createBoard({ name: newBoardName.trim(), description: newBoardDesc.trim() })
-    setSelectedBoardId(board.id)
+    handleBoardChange(board.id)
     setNewBoardName('')
     setNewBoardDesc('')
     setShowNewBoardModal(false)
@@ -139,18 +172,44 @@ export default function ProjectsPage() {
     setShowNewTaskModal(false)
   }
 
+  const handleDuplicateTask = async (source: ProjectTask, newTaskId?: string) => {
+    return createTask({
+      id: newTaskId,
+      boardId: source.board_id,
+      columnId: source.column_id,
+      title: `${source.title} (copy)`,
+      description: source.description || undefined,
+      priority: source.priority,
+      assigneeId: source.assignee_id || undefined,
+      dueDate: source.due_date || undefined,
+      startDate:source.start_date||undefined,
+      estimatedHours:source.estimated_hours??undefined,
+    })
+  }
+
   const currentBoard = boards.find((b) => b.id === (activeBoardId || selectedBoardId))
 
   useEffect(() => {
-    const taskId = new URLSearchParams(window.location.search).get('task')
-    if (!taskId || selectedTask) return
-    const task = tasks.find((item) => item.id === taskId)
+    if (!urlTaskId) {
+      setSelectedTask(null)
+      return
+    }
+
+    const task = tasks.find((item) => item.id === urlTaskId)
     if (task) setSelectedTask(task)
-  }, [tasks, selectedTask])
+  }, [tasks, urlTaskId])
+
+  const openTask = (task: ProjectTask) => {
+    setSelectedTask(task)
+    const params = new URLSearchParams(queryString)
+    params.set('board', task.board_id)
+    params.set('task', task.id)
+    router.push(`/projects?${params.toString()}`, { scroll: false })
+  }
 
   const handleCloseTask = () => {
     setSelectedTask(null)
-    const params = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(queryString)
     params.delete('task')
     const query = params.toString()
     router.replace(query ? `/projects?${query}` : '/projects', { scroll: false })
@@ -176,7 +235,7 @@ export default function ProjectsPage() {
             <div className="flex items-center gap-2">
               <select
                 value={activeBoardId || ''}
-                onChange={(e) => setSelectedBoardId(e.target.value)}
+                onChange={(e) => handleBoardChange(e.target.value)}
                 className="text-base sm:text-lg font-bold text-[#000000] bg-transparent focus:outline-none cursor-pointer border border-transparent hover:border-[#E4E4E7] rounded-lg px-1 sm:px-2 py-0.5 transition-colors max-w-[160px] sm:max-w-none truncate"
               >
                 {boards.length === 0 && <option value="">No Project Boards</option>}
@@ -278,11 +337,11 @@ export default function ProjectsPage() {
         ) : workView === 'list' ? (
           <div className="h-full overflow-y-auto rounded-xl border border-[var(--ui-border)] bg-[var(--surface)]">
             <div className="grid min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] border-b border-[var(--ui-border)] bg-[var(--surface-raised)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]"><span>Task</span><span>Status</span><span>Priority</span><span>Assignee</span><span>Due</span></div>
-            {filteredTasks.map((task) => <button key={task.id} type="button" onClick={() => setSelectedTask(task)} className="grid w-full min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] items-center border-b border-[var(--ui-border)] px-4 py-3 text-left last:border-b-0 hover:bg-[var(--surface-muted)]"><span className="min-w-0"><strong className="block truncate text-xs">{task.title}</strong><span className="block truncate text-[10px] text-[var(--muted-foreground)]">{task.description || 'No description'}</span></span><span className="text-xs text-[var(--muted-foreground)]">{columns.find((column) => column.id === task.column_id)?.name || 'Unknown'}</span><span><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: PRIORITY_CONFIG[task.priority].bg, color: PRIORITY_CONFIG[task.priority].text }}>{PRIORITY_CONFIG[task.priority].label}</span></span><span className="flex items-center gap-2 text-xs">{task.assignee ? <><Avatar src={task.assignee.avatar_url} name={task.assignee.display_name} size={24}/><span className="truncate">{task.assignee.display_name}</span></> : <span className="text-[var(--muted-foreground)]">Unassigned</span>}</span><span className="text-xs text-[var(--muted-foreground)]">{task.due_date ? new Date(task.due_date).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '—'}</span></button>)}
+            {filteredTasks.map((task) => <button key={task.id} type="button" onClick={() => openTask(task)} className="grid w-full min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] items-center border-b border-[var(--ui-border)] px-4 py-3 text-left last:border-b-0 hover:bg-[var(--surface-muted)]"><span className="min-w-0"><strong className="block truncate text-xs">{task.title}</strong><span className="block truncate text-[10px] text-[var(--muted-foreground)]">{task.description || 'No description'}</span></span><span className="text-xs text-[var(--muted-foreground)]">{columns.find((column) => column.id === task.column_id)?.name || 'Unknown'}</span><span><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: PRIORITY_CONFIG[task.priority].bg, color: PRIORITY_CONFIG[task.priority].text }}>{PRIORITY_CONFIG[task.priority].label}</span></span><span className="flex items-center gap-2 text-xs">{task.assignee ? <><Avatar src={task.assignee.avatar_url} name={task.assignee.display_name} size={24}/><span className="truncate">{task.assignee.display_name}</span></> : <span className="text-[var(--muted-foreground)]">Unassigned</span>}</span><span className="text-xs text-[var(--muted-foreground)]">{task.due_date ? new Date(task.due_date).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '—'}</span></button>)}
             {!filteredTasks.length && <div className="grid min-h-48 place-items-center text-sm text-[var(--muted-foreground)]">No tasks match your filters.</div>}
           </div>
         ) : workView === 'gantt' ? (
-          <GanttChart items={filteredTasks.map((task) => ({ id: task.id, title: task.title, subtitle: columns.find((column) => column.id === task.column_id)?.name, start: task.start_date || task.created_at, end: task.due_date || task.start_date || task.created_at, color: PRIORITY_CONFIG[task.priority].text, onClick: () => setSelectedTask(task) }))} emptyText="Add tasks to see the project timeline." />
+          <GanttChart items={filteredTasks.map((task) => ({ id: task.id, title: task.title, subtitle: columns.find((column) => column.id === task.column_id)?.name, start: task.start_date || task.created_at, end: task.due_date || task.start_date || task.created_at, color: PRIORITY_CONFIG[task.priority].text, onClick: () => openTask(task) }))} emptyText="Add tasks to see the project timeline." />
         ) : (
           /* Kanban Board Columns */
           <div className="h-full flex items-start gap-4 sm:gap-5 pb-4">
@@ -335,7 +394,7 @@ export default function ProjectsPage() {
                             draggable
                             onDragStart={(event) => { setDraggedTaskId(task.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', task.id) }}
                             onDragEnd={() => { setDraggedTaskId(null); setDragOverColumnId(null) }}
-                            onClick={() => setSelectedTask(task)}
+                            onClick={() => openTask(task)}
                             className={`group bg-white p-4 rounded-xl border border-[#DDE8F2] shadow-xs hover:shadow-md hover:border-[#A9D5E9] transition-all cursor-grab active:cursor-grabbing relative ${draggedTaskId === task.id ? 'opacity-45 scale-[.98]' : ''}`}
                           >
                             {/* Priority Badge & Card Header */}
@@ -657,281 +716,24 @@ export default function ProjectsPage() {
 
       {/* MODAL: Task Detail & Comments */}
       {selectedTask && (
-        <TaskDetailModal
+        <EnterpriseTaskDetailModal
+          key={selectedTask.id}
           task={selectedTask}
           columns={columns}
+          boards={boards}
+          availableTasks={workspaceTasks.length ? workspaceTasks : tasks}
+          availableColumns={workspaceColumns.length ? workspaceColumns : columns}
           teamProfiles={Array.from(new Map([...(currentProfile ? [currentProfile] : []), ...teamProfiles].map((profile) => [profile.id, profile])).values())}
+          currentProfile={currentProfile || undefined}
+          initialComments={existingTaskComments}
           onClose={handleCloseTask}
           onUpdate={updateTask}
           onDelete={deleteTask}
+          onDuplicate={handleDuplicateTask}
+          onMove={moveTaskToBoard}
           onAddComment={addTaskComment}
         />
       )}
-    </div>
-  )
-}
-
-function TaskDetailModal({
-  task,
-  columns,
-  teamProfiles,
-  onClose,
-  onUpdate,
-  onDelete,
-  onAddComment
-}: {
-  task: ProjectTask
-  columns: { id: string; name: string }[]
-  teamProfiles: Profile[]
-  onClose: () => void
-  onUpdate: (params: any) => Promise<any>
-  onDelete: (id: string) => Promise<any>
-  onAddComment: (params: any) => Promise<any>
-}) {
-  const [title, setTitle] = useState(task.title)
-  const [description, setDescription] = useState(task.description || '')
-  const [priority, setPriority] = useState<TaskPriority>(task.priority)
-  const [columnId, setColumnId] = useState(task.column_id)
-  const [assigneeId, setAssigneeId] = useState(task.assignee_id || '')
-  const [dueDate, setDueDate] = useState(task.due_date ? task.due_date.split('T')[0] : '')
-
-  const [commentText, setCommentText] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [isCommenting, setIsCommenting] = useState(false)
-  const { data: comments = [], isLoading: commentsLoading } = useTaskComments(task.id)
-
-  const handleSave = async () => {
-    if (!title.trim()) {
-      setSaveError('Task title is required.')
-      return
-    }
-    setIsSaving(true)
-    setSaveError(null)
-    try {
-      await onUpdate({
-        taskId: task.id,
-        title: title.trim(),
-        description,
-        priority,
-        columnId,
-        assigneeId: assigneeId || null,
-        dueDate: dueDate || null
-      })
-      onClose()
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Changes could not be saved.')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this task?')) {
-      await onDelete(task.id)
-      onClose()
-    }
-  }
-
-  const handleCommentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!commentText.trim()) return
-    setIsCommenting(true)
-    try {
-      await onAddComment({ taskId: task.id, comment: commentText.trim() })
-      setCommentText('')
-    } finally {
-      setIsCommenting(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-[#E5E7EB] max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#EEEAFB] text-[#5141BF]">
-              {columns.find((c) => c.id === columnId)?.name}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDelete}
-              className="p-1.5 text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-colors"
-              title="Delete Task"
-            >
-              <Trash2 size={16} />
-            </button>
-            <button onClick={onClose} className="text-[#9CA3AF] hover:text-[#0D1F31]">
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-4">
-          {/* Title */}
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-              Task Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-base font-bold text-[#0D1F31] border border-[#E5E7EB] rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#3B82F6]"
-            />
-          </div>
-
-          {/* Controls Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-                Status
-              </label>
-              <select
-                value={columnId}
-                onChange={(e) => setColumnId(e.target.value)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
-              >
-                {columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-                Priority
-              </label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-                Assignee
-              </label>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
-              >
-                <option value="">Unassigned</option>
-                {teamProfiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.display_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-                Due Date
-              </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#0D1F31] focus:outline-none focus:border-[#5141BF]"
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-              Description
-            </label>
-            <textarea
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add detailed task requirements..."
-                className="w-full text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:border-[#5141BF] leading-relaxed"
-            />
-          </div>
-
-          {/* Comments Section */}
-          <div className="pt-4 border-t border-[#E5E7EB]">
-            <h4 className="text-xs font-bold text-[#0D1F31] mb-3 flex items-center gap-1.5">
-              <MessageSquare size={14} className="text-[#3B82F6]" /> Activity & Discussion ({comments.length})
-            </h4>
-
-            {/* Existing Comments */}
-            <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-1">
-              {commentsLoading ? (
-                <p className="text-xs text-[#9CA3AF]">Loading comments...</p>
-              ) : comments.length === 0 ? (
-                <p className="text-xs text-[#9CA3AF] italic">No comments yet.</p>
-              ) : (
-                comments.map((c) => (
-                  <div key={c.id} className="flex items-start gap-2.5 bg-[#F8FAFC] p-2.5 rounded-xl border border-[#E2E8F0]">
-                    <Avatar src={c.profile?.avatar_url} name={c.profile?.display_name || 'User'} size={24} />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#0D1F31]">
-                          {c.profile?.display_name || 'User'}
-                        </span>
-                        <span className="text-[10px] text-[#94A3B8]">
-                          {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#334155] mt-0.5 leading-relaxed">{c.comment}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Comment Input */}
-            <form onSubmit={handleCommentSubmit} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Write a comment..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                disabled={isCommenting}
-                className="flex-1 px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#5141BF] disabled:opacity-60"
-              />
-              <button
-                type="submit"
-                disabled={isCommenting || !commentText.trim()}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#5141BF] hover:bg-[#4133A5] rounded-lg disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isCommenting ? 'Sending…' : 'Send'}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Modal Footer */}
-        {saveError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{saveError}</p>}
-        <div className="flex justify-end gap-2 pt-3 border-t border-[#E5E7EB]">
-          <button
-            onClick={onClose}
-            disabled={isSaving}
-            className="px-3.5 py-1.5 text-xs font-semibold text-[#4B5563] hover:bg-[#F3F4F6] rounded-lg"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="min-w-28 px-4 py-1.5 text-xs font-semibold text-white bg-[#5141BF] hover:bg-[#4133A5] rounded-lg shadow-xs disabled:cursor-wait disabled:opacity-60"
-          >
-            {isSaving ? 'Saving…' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
