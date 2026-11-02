@@ -51,14 +51,13 @@ export function ActivityPanel({ comments,activity,attachments,members,currentUse
       ...activity.filter((event) => !COMMENT_ACTIVITY_TYPES.has(event.type)).map((event) => ({kind:'event' as const,id:`event-${event.id}`,timestamp:event.timestamp,event})),
     ].sort((a,b) => b.timestamp.localeCompare(a.timestamp))
   },[activity,roots])
-  return <aside className="flex h-full min-h-0 flex-col bg-[var(--surface-raised)]">
-    <header className="sticky top-0 z-10 shrink-0 border-b border-[var(--ui-border)] bg-[var(--surface-raised)] px-4 pb-3 pt-4 sm:px-5">
+  return <aside className="flex h-full min-h-0 flex-col bg-slate-50/50 dark:bg-[#14171A]">
+    <header className="z-10 shrink-0 border-b border-[var(--ui-border)] bg-[var(--surface-raised)] px-4 pb-3 pt-4 sm:px-5">
       <div><h2 className="text-sm font-semibold">Activity &amp; Discussion</h2><p className="text-[10px] text-[var(--muted-foreground)]">{visibleCount} {visibleCount===1?'item':'items'}</p></div>
       <div role="tablist" aria-label="Activity view" className="mt-3 grid grid-cols-3 rounded-lg bg-[var(--surface-muted)] p-1">{(['all','comments','history'] as ActivityFilter[]).map((option) => <button key={option} id={`activity-${option}-tab`} role="tab" aria-selected={filter===option} aria-controls="activity-feed" tabIndex={filter===option?0:-1} type="button" onClick={() => actions.setFilter(option)} onKeyDown={(event) => { if (!['ArrowLeft','ArrowRight'].includes(event.key)) return; event.preventDefault(); const options:ActivityFilter[]=['all','comments','history']; const offset=event.key==='ArrowRight'?1:-1; const next=options[(options.indexOf(option)+offset+options.length)%options.length]; actions.setFilter(next); requestAnimationFrame(() => document.getElementById(`activity-${next}-tab`)?.focus()) }} className={`h-7 rounded-md text-[11px] font-semibold capitalize transition ${filter===option ? 'bg-[var(--surface)] text-[var(--foreground)] shadow-sm' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}>{option}</button>)}</div>
     </header>
-    <div id="activity-feed" role="tabpanel" aria-labelledby={`activity-${filter}-tab`} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-      <div className={filter==='history'?'hidden':''}><CommentComposer currentUser={memberMap.get(currentUserId)} members={members} onSubmit={(body,mentionIds,files) => submitWithAttachments(body,mentionIds,files,onUploadFiles,actions.addComment)} composerRef={composerRef} onDraftStateChange={onDraftStateChange}/></div>
-      <div className="mt-5 space-y-4">
+    <div id="activity-feed" role="tabpanel" aria-labelledby={`activity-${filter}-tab`} className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:px-5">
+      <div className="space-y-4">
         {filter==='all' && mixedFeed.map((item) => item.kind==='comment'
           ? <CommentCard key={item.id} comment={item.comment} replies={repliesByParent.get(item.comment.id)||[]} members={memberMap} attachments={attachmentMap} currentUserId={currentUserId} actions={actions}/>
           : <ActivityEventRow key={item.id} event={item.event} members={memberMap}/>)}
@@ -66,6 +65,9 @@ export function ActivityPanel({ comments,activity,attachments,members,currentUse
         {filter==='history' && <ActivityTimeline events={activity} members={memberMap}/>}
         {!visibleCount && <div className="py-12 text-center"><MessageSquare className="mx-auto text-[var(--muted-foreground)]" size={22}/><p className="mt-2 text-xs font-semibold">No activity yet</p><p className="mt-1 text-[11px] text-[var(--muted-foreground)]">Changes and comments will appear here.</p></div>}
       </div>
+    </div>
+    <div className={`${filter==='history'?'hidden':''} shrink-0 border-t border-[var(--ui-border)] bg-[var(--surface)] p-4 sm:px-5`}>
+      <CommentComposer currentUser={memberMap.get(currentUserId)} members={members} onSubmit={(body,mentionIds,files) => submitWithAttachments(body,mentionIds,files,onUploadFiles,actions.addComment)} composerRef={composerRef} onDraftStateChange={onDraftStateChange}/>
     </div>
   </aside>
 }

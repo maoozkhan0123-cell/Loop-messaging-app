@@ -80,4 +80,31 @@ describe('ChecklistSection', () => {
     fireEvent.keyDown(itemInput, { key: 'Enter' })
     expect(actions.addItem).toHaveBeenCalledWith('checklist-1', 'Notify customers')
   })
+
+  it('autofocuses the add-item field and discards its draft with Escape', () => {
+    const actions = createActions()
+    render(<ChecklistSection checklists={checklists} members={members} actions={actions} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }))
+    const itemInput = screen.getByPlaceholderText('Add an item')
+    expect(itemInput).toHaveFocus()
+
+    fireEvent.change(itemInput, { target: { value: 'Do not keep this' } })
+    fireEvent.keyDown(itemInput, { key: 'Escape' })
+
+    expect(screen.queryByPlaceholderText('Add an item')).not.toBeInTheDocument()
+    expect(actions.addItem).not.toHaveBeenCalled()
+  })
+
+  it('reports zero progress safely for an empty checklist', () => {
+    const actions = createActions()
+    const emptyChecklist: Checklist = { ...checklists[0], items: [] }
+    const { container } = render(<ChecklistSection checklists={[emptyChecklist]} members={members} actions={actions} />)
+
+    expect(screen.getByText(/0 of 0 items completed/)).toBeInTheDocument()
+    expect(screen.getByText(/0\/0/)).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
+    expect(screen.getByRole('progressbar').firstElementChild).toHaveStyle({ width: '0%' })
+    expect(container).not.toHaveTextContent(/NaN|Infinity/)
+  })
 })
