@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import { formatMessageTime, formatShortTime, groupReactions, isImageMime, formatFileSize, cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
-import { Pencil, Trash2, Paperclip, Download, Check, CheckCheck, ChevronRight, Plus, Play, Pause, Mic, Bookmark, Copy, Link2 } from 'lucide-react'
+import { Pencil, Trash2, Paperclip, Download, Check, ChevronRight, Plus, Play, Pause, Mic, Bookmark, Copy, Link2 } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { formatMessage } from '@/lib/formatMessage'
 import type { Message as MessageType, Attachment } from '@/types/database'
 import { useSignedAttachmentUrl } from '@/hooks/useSignedAttachmentUrl'
 import { useEditMessage, useDeleteMessage } from '@/hooks/useMessages'
@@ -30,7 +32,6 @@ export const Message = memo(function Message({
   const [editBody, setEditBody] = useState(message.body ?? '')
   const [showFullPicker, setShowFullPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [saved, setSaved] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
   const plusBtnRef = useRef<HTMLButtonElement>(null)
@@ -90,6 +91,8 @@ export const Message = memo(function Message({
   }
 
   const handleDelete = async () => {
+    const ok = await confirmDialog({ title: 'Delete message?', description: 'This cannot be undone. The message will be permanently removed.' })
+    if (!ok) return
     try { await deleteMessage.mutateAsync({ messageId: message.id, channelId }) } catch { /* noop */ }
   }
 
@@ -104,7 +107,8 @@ export const Message = memo(function Message({
 
   if (!!message.deleted_at) {
     return (
-      <div className="flex gap-3 px-5 py-0.5">
+      <div className="flex items-center gap-2.5 px-4 py-1 sm:px-6">
+        <span className="grid w-9 shrink-0 place-items-center text-[#D1D5DB]"><Trash2 size={13} /></span>
         <p className="text-sm italic text-[#9CA3AF]">This message was deleted.</p>
       </div>
     )
@@ -114,8 +118,9 @@ export const Message = memo(function Message({
     <Tooltip.Provider delayDuration={0}>
       <div
         className={cn(
-          'group relative flex flex-col gap-1.5 py-1 px-5 transition-colors',
-          isEditing ? 'bg-[#f2c74433]' : 'hover:bg-gray-100/60'
+          'group relative flex flex-col gap-1.5 px-4 sm:px-6 transition-colors',
+          showHeader ? 'pt-2 pb-0.5' : 'py-0.5',
+          isEditing ? 'bg-[#f2c74433]' : 'hover:bg-[#F8FAFC]'
         )}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -140,9 +145,10 @@ export const Message = memo(function Message({
           <div className="flex-1 min-w-0">
             {showHeader && (
               <div className="flex items-baseline gap-2 mb-0.5">
-                <span className="text-sm font-bold text-[#111827] leading-snug">
+                <span className="text-[14px] font-semibold text-[#111827] leading-snug">
                   {profile?.display_name ?? 'Unknown'}
                 </span>
+                {isOwn && <span className="rounded bg-[#F3F4F6] px-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">You</span>}
                 <Tooltip.Root>
                   <Tooltip.Trigger asChild>
                     <span tabIndex={0} className="text-xs text-[#9CA3AF] cursor-help leading-snug">
@@ -181,10 +187,10 @@ export const Message = memo(function Message({
                 </div>
               </div>
             ) : (
-              <p className="text-[14px] text-[#111827] leading-relaxed whitespace-pre-wrap break-words">
-                {message.body}
+              <div className="text-[14px] text-[#111827] leading-relaxed whitespace-pre-wrap break-words">
+                {message.body ? formatMessage(message.body) : null}
                 {message.edited_at && <span className="text-[11px] text-[#9CA3AF] ml-1">(edited)</span>}
-              </p>
+              </div>
             )}
 
             {/* Attachments */}
@@ -224,13 +230,6 @@ export const Message = memo(function Message({
                 >
                   <Plus size={10} />
                 </button>
-              </div>
-            )}
-
-            {/* Delivered tick — own messages */}
-            {isOwn && !isEditing && (
-              <div className="flex justify-end mt-0.5 pr-1">
-                <CheckCheck size={11} className="text-[#3589FA]" aria-label="Delivered" />
               </div>
             )}
 
@@ -311,7 +310,7 @@ export const Message = memo(function Message({
 
             {/* Delete — own messages */}
             {isOwn && (
-              <ActionBtn label="Delete message" onClick={() => setShowDeleteModal(true)} danger>
+              <ActionBtn label="Delete message" onClick={() => void handleDelete()} danger>
                 <Trash2 size={13} />
               </ActionBtn>
             )}
@@ -332,39 +331,6 @@ export const Message = memo(function Message({
           </>
         )}
 
-        {/* Custom delete confirmation modal */}
-        {showDeleteModal && (
-          <>
-            <div className="fixed inset-0 z-[500] bg-black/40 backdrop-blur-[1px]" onClick={() => setShowDeleteModal(false)} />
-            <div className="fixed inset-0 z-[501] flex items-center justify-center pointer-events-none">
-              <div className="bg-white rounded-2xl shadow-2xl w-[340px] mx-4 pointer-events-auto overflow-hidden">
-                <div className="px-6 pt-5 pb-4">
-                  <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mb-3">
-                    <Trash2 size={18} className="text-red-500" />
-                  </div>
-                  <h3 className="font-bold text-[16px] text-[#111827] mb-1">Delete message?</h3>
-                  <p className="text-[13px] text-[#6B7280]">This cannot be undone. The message will be permanently removed.</p>
-                </div>
-                <div className="flex border-t border-[#F3F4F6]">
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteModal(false)}
-                    className="flex-1 h-12 text-[14px] font-medium text-[#6B7280] hover:bg-[#F9FAFB] transition-colors border-r border-[#F3F4F6]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowDeleteModal(false); void handleDelete() }}
-                    className="flex-1 h-12 text-[14px] font-semibold text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </div>
     </Tooltip.Provider>
   )

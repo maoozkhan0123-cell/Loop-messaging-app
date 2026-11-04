@@ -14,6 +14,10 @@ import type { Message } from '@/types/database'
 import { cn, formatFileSize, isImageMime } from '@/lib/utils'
 import { usePreferences } from '@/hooks/usePreferences'
 import { bumpThreadReplyCount } from '@/hooks/useMessages'
+import { htmlToMarkdown, markdownToHtml } from '@/lib/richText'
+
+// About 8 lines of 14px text before the box starts scrolling.
+const MAX_INPUT_HEIGHT = 208
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
 const MAX_MESSAGE_LENGTH = 10_000
@@ -60,7 +64,11 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const [scheduleFor, setScheduleFor] = useState('')
   const [scheduleMin, setScheduleMin] = useState('')
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
+  const savedRangeRef = useRef<Range | null>(null)
+  const [active, setActive] = useState<Record<string, boolean>>({})
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const emojiRef = useRef<HTMLDivElement>(null)
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
@@ -80,10 +88,16 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const { preferences } = usePreferences()
   const draftKey = `bysync.draft.${channelId}.${parentId ?? 'root'}`
 
+  /** Replaces the whole message (draft restore, clear after send, failed send). */
+  const replaceBody = useCallback((markdown: string) => {
+    setBody(markdown)
+    if (editorRef.current) editorRef.current.innerHTML = markdownToHtml(markdown)
+  }, [])
+
   // Restore and preserve unsent text per conversation. Files remain session-only.
   useEffect(() => {
-    try { setBody(sessionStorage.getItem(draftKey) ?? '') } catch { setBody('') }
-  }, [draftKey])
+    try { replaceBody(sessionStorage.getItem(draftKey) ?? '') } catch { replaceBody('') }
+  }, [draftKey, replaceBody])
 
   useEffect(() => {
     try {
@@ -190,12 +204,11 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
     const savedFiles = [...pendingFiles]
 
     // Clear input immediately
-    setBody('')
+    replaceBody('')
     try { sessionStorage.removeItem(draftKey) } catch {}
     setPendingFiles([])
     setUploadingSet(new Set())
     setPendingPreviews((prev) => { prev.forEach(URL.revokeObjectURL); return [] })
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     try {
       // Step 1: Create message text — fast (~100ms)
@@ -272,7 +285,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         void queryClient.invalidateQueries({ queryKey: ['channel-files', channelId] })
       }
     } catch (err) {
-      setBody(savedBody)
+      replaceBody(savedBody)
       setError(err instanceof Error ? err.message : 'Failed to send')
     } finally {
       setIsSending(false)
@@ -282,7 +295,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         uploadPromisesRef.current.delete(f)
       })
     }
-  }, [body, pendingFiles, channelId, parentId, isSending, supabase, profile, queryClient, draftKey])
+  }, [body, pendingFiles, channelId, parentId, isSending, supabase, profile, queryClient, draftKey, replaceBody])
 
   const handleSchedule = async () => {
     const trimmed = body.trim()
@@ -296,7 +309,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         body: trimmed, scheduled_for: when.toISOString(), status: 'pending',
       })
       if (scheduleError) throw scheduleError
-      setBody(''); setScheduleFor(''); setScheduleOpen(false)
+      replaceBody(''); setScheduleFor(''); setScheduleOpen(false)
       try { sessionStorage.removeItem(draftKey) } catch {}
       void queryClient.invalidateQueries({ queryKey: ['scheduled-messages'] })
     } catch (reason) {
@@ -304,37 +317,137 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
     } finally { setIsSending(false) }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter' && !e.shiftKey && preferences.enterToSend) { e.preventDefault(); void handleSend() }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !preferences.enterToSend) { e.preventDefault(); void handleSend() }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrapSelection('**') }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrapSelection('_') }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') { e.preventDefault(); format('strikeThrough') }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setBody(e.target.value)
-    if (error && !e.target.value.trim().length) setError(null)
-    const el = e.target
-    el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  const syncFromEditor = () => {
+    const el = editorRef.current
+    if (!el) return
+    const markdown = htmlToMarkdown(el)
+    // Leave the box truly empty so the placeholder shows again.
+    if (!markdown && !el.querySelector('ul,ol,blockquote,pre')) el.innerHTML = ''
+    setBody(markdown)
+    if (error && !markdown) setError(null)
+  }
+
+  const handleInput = () => {
+    syncFromEditor()
     if (profile) sendTyping(profile.display_name)
   }
 
   // ── Formatting ─────────────────────────────────────────────────────────────
-  const wrapSelection = useCallback((before: string, after: string = before) => {
-    const el = textareaRef.current
+  // Highlight the toolbar buttons that apply at the cursor, like Slack.
+  const refreshActive = useCallback(() => {
+    const el = editorRef.current
+    const selection = document.getSelection()
+    if (!el || !selection?.rangeCount || !el.contains(selection.anchorNode)) return
+    savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+    const block = String(document.queryCommandValue('formatBlock')).toLowerCase()
+    const inCode = !!(selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement)?.closest('code')
+    setActive({
+      bold: document.queryCommandState('bold'),
+      italic: document.queryCommandState('italic'),
+      strikeThrough: document.queryCommandState('strikeThrough'),
+      insertOrderedList: document.queryCommandState('insertOrderedList'),
+      insertUnorderedList: document.queryCommandState('insertUnorderedList'),
+      blockquote: block === 'blockquote',
+      pre: block === 'pre',
+      code: inCode,
+    })
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', refreshActive)
+    return () => document.removeEventListener('selectionchange', refreshActive)
+  }, [refreshActive])
+
+  /** Puts the cursor back where it was before a toolbar click or picker. */
+  const restoreSelection = () => {
+    const el = editorRef.current
     if (!el) return
-    const s = el.selectionStart; const e2 = el.selectionEnd
-    const selected = body.substring(s, e2)
-    const newBody = body.substring(0, s) + before + selected + after + body.substring(e2)
-    setBody(newBody)
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + before.length, e2 + before.length) })
-  }, [body])
+    el.focus()
+    const selection = document.getSelection()
+    const range = savedRangeRef.current
+    if (selection && range && el.contains(range.startContainer)) { selection.removeAllRanges(); selection.addRange(range) }
+    else if (selection) { const end = document.createRange(); end.selectNodeContents(el); end.collapse(false); selection.removeAllRanges(); selection.addRange(end) }
+  }
+
+  const format = (command: string) => {
+    restoreSelection()
+    document.execCommand('styleWithCSS', false, 'false')
+    if (command === 'blockquote' || command === 'pre') {
+      const current = String(document.queryCommandValue('formatBlock')).toLowerCase()
+      document.execCommand('formatBlock', false, current === command ? 'div' : command)
+    } else {
+      document.execCommand(command)
+    }
+    syncFromEditor(); refreshActive()
+  }
+
+  const toggleInlineCode = () => {
+    restoreSelection()
+    const selection = document.getSelection()
+    if (!selection?.rangeCount) return
+    const range = selection.getRangeAt(0)
+    const startEl = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement
+    const existing = startEl?.closest('code')
+    if (existing && editorRef.current?.contains(existing)) {
+      existing.replaceWith(document.createTextNode(existing.textContent ?? ''))
+    } else {
+      const code = document.createElement('code')
+      code.textContent = range.collapsed ? 'code' : range.toString()
+      range.deleteContents()
+      range.insertNode(code)
+      // A zero-width space after the code lets typing continue outside it.
+      const after = document.createTextNode('\u200B')
+      code.after(after)
+      const caret = document.createRange()
+      if (range.collapsed && code.textContent === 'code') caret.selectNodeContents(code)
+      else caret.setStart(after, 1)
+      selection.removeAllRanges(); selection.addRange(caret)
+    }
+    syncFromEditor(); refreshActive()
+  }
+
+  const openLink = () => {
+    restoreSelection()
+    setLinkUrl('')
+    setLinkOpen(true)
+  }
+
+  const applyLink = () => {
+    const raw = linkUrl.trim()
+    setLinkOpen(false)
+    if (!raw) return
+    const url = /^(https?:\/\/|mailto:)/i.test(raw) ? raw : `https://${raw}`
+    restoreSelection()
+    const selection = document.getSelection()
+    if (selection?.isCollapsed) {
+      const link = document.createElement('a')
+      link.href = url; link.textContent = raw
+      selection.getRangeAt(0).insertNode(link)
+      const caret = document.createRange(); caret.setStartAfter(link)
+      selection.removeAllRanges(); selection.addRange(caret)
+    } else {
+      document.execCommand('createLink', false, url)
+    }
+    syncFromEditor()
+  }
+
+  /** Inserts plain text at the cursor (emoji, @). */
+  const insertText = (text: string) => {
+    restoreSelection()
+    document.execCommand('insertText', false, text)
+    syncFromEditor()
+  }
 
   const handleEmojiSelect = (data: EmojiClickData) => {
-    setBody((prev) => prev + data.emoji)
     setShowEmoji(false)
-    textareaRef.current?.focus()
+    insertText(data.emoji)
   }
 
   // ── Drag & drop ────────────────────────────────────────────────────────────
@@ -347,7 +460,10 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   }
   const handlePaste = (e: React.ClipboardEvent) => {
     const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
-    if (files.length > 0) { e.preventDefault(); addFiles(files) }
+    if (files.length > 0) { e.preventDefault(); addFiles(files); return }
+    // Paste as plain text so styles from other apps don't leak into the message.
+    e.preventDefault()
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
   }
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
@@ -393,7 +509,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const canSend = (!!body.trim() || pendingFiles.length > 0) && !isSending && !overLimit
 
   return (
-    <div className="px-2 sm:px-4 pb-2 sm:pb-4 flex-shrink-0">
+    <div className="px-3 sm:px-5 pb-3 sm:pb-5 flex-shrink-0">
       {error && <p className="text-xs text-red-500 mb-1 px-1 whitespace-pre-wrap">{error}</p>}
       {nearLimit && !error && (
         <p className={cn('text-xs mb-1 px-1 text-right', overLimit ? 'text-red-500' : 'text-[#9CA3AF]')}>
@@ -403,8 +519,8 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
 
       <div
         className={cn(
-          'rounded-xl border bg-white transition-all overflow-hidden',
-          isDragging ? 'border-[#3589FA] bg-blue-50/30' : 'border-[#D1D5DB] focus-within:border-[#3589FA] shadow-sm'
+          'rounded-2xl border bg-white transition-all overflow-hidden',
+          isDragging ? 'border-[#3589FA] bg-blue-50/30' : 'border-[#E5E7EB] shadow-sm focus-within:border-[#3589FA] focus-within:shadow-[0_0_0_3px_rgba(53,137,250,0.12)]'
         )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -412,18 +528,36 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
       >
         {/* Formatting toolbar */}
         {preferences.markdownHelp && <div className="flex items-center gap-0.5 px-2 sm:px-3 pt-2 pb-1.5 border-b border-[#F3F4F6] overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <FmtBtn title="Bold (Ctrl+B)" onClick={() => wrapSelection('**')}><Bold size={13} /></FmtBtn>
-          <FmtBtn title="Italic (Ctrl+I)" onClick={() => wrapSelection('_')}><Italic size={13} /></FmtBtn>
-          <FmtBtn title="Strikethrough" onClick={() => wrapSelection('~~')}><Strikethrough size={13} /></FmtBtn>
+          <FmtBtn title="Bold (Ctrl+B)" active={active.bold} onClick={() => format('bold')}><Bold size={14} /></FmtBtn>
+          <FmtBtn title="Italic (Ctrl+I)" active={active.italic} onClick={() => format('italic')}><Italic size={14} /></FmtBtn>
+          <FmtBtn title="Strikethrough (Ctrl+Shift+X)" active={active.strikeThrough} onClick={() => format('strikeThrough')}><Strikethrough size={14} /></FmtBtn>
           <Sep />
-          <FmtBtn title="Link" onClick={() => wrapSelection('[', '](url)')}><Link2 size={13} /></FmtBtn>
-          <FmtBtn title="Ordered list" onClick={() => wrapSelection('\n1. ', '')}><ListOrdered size={13} /></FmtBtn>
-          <FmtBtn title="Bullet list" onClick={() => wrapSelection('\n- ', '')}><List size={13} /></FmtBtn>
+          <FmtBtn title="Link" active={linkOpen} onClick={openLink}><Link2 size={14} /></FmtBtn>
+          <FmtBtn title="Numbered list" active={active.insertOrderedList} onClick={() => format('insertOrderedList')}><ListOrdered size={14} /></FmtBtn>
+          <FmtBtn title="Bulleted list" active={active.insertUnorderedList} onClick={() => format('insertUnorderedList')}><List size={14} /></FmtBtn>
           <Sep />
-          <FmtBtn title="Inline code" onClick={() => wrapSelection('`')}><Code size={13} /></FmtBtn>
-          <FmtBtn title="Code block" onClick={() => wrapSelection('\n```\n', '\n```')}><FileText size={13} /></FmtBtn>
-          <FmtBtn title="Block quote" onClick={() => wrapSelection('\n> ', '')}><Quote size={13} /></FmtBtn>
+          <FmtBtn title="Code" active={active.code} onClick={toggleInlineCode}><Code size={14} /></FmtBtn>
+          <FmtBtn title="Code block" active={active.pre} onClick={() => format('pre')}><FileText size={14} /></FmtBtn>
+          <FmtBtn title="Quote" active={active.blockquote} onClick={() => format('blockquote')}><Quote size={14} /></FmtBtn>
         </div>}
+        {linkOpen && (
+          <div className="flex items-center gap-2 border-b border-[#F3F4F6] px-3 py-2">
+            <Link2 size={14} className="flex-shrink-0 text-[#9CA3AF]" />
+            <input
+              autoFocus
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') { event.preventDefault(); applyLink() }
+                if (event.key === 'Escape') { event.preventDefault(); setLinkOpen(false); restoreSelection() }
+              }}
+              placeholder="Paste or type a link"
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[#111827] placeholder-[#9CA3AF] focus:outline-none"
+            />
+            <button type="button" onClick={() => { setLinkOpen(false); restoreSelection() }} className="h-7 rounded-md px-2 text-xs font-semibold text-[#6B7280] hover:bg-[#F3F4F6]">Cancel</button>
+            <button type="button" onClick={applyLink} disabled={!linkUrl.trim()} className="h-7 rounded-md bg-[#3589FA] px-3 text-xs font-bold text-white disabled:opacity-50">Add link</button>
+          </div>
+        )}
 
         {/* ── File previews (shows BEFORE sending — like Slack/WhatsApp) ── */}
         {pendingFiles.length > 0 && (
@@ -494,16 +628,21 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
             <span className="text-xs text-[#9CA3AF]">Click the mic icon to stop</span>
           </div>
         ) : (
-          <textarea
-            ref={textareaRef}
-            value={body}
-            onChange={handleChange}
+          <div
+            ref={editorRef}
+            role="textbox"
+            aria-multiline="true"
+            aria-label={placeholder ?? 'Message'}
+            contentEditable
+            suppressContentEditableWarning
+            data-placeholder={placeholder ?? 'Message…'}
+            onInput={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={placeholder ?? 'Message…'}
-            rows={1}
-            className="w-full px-4 py-2.5 text-[14px] resize-none focus:outline-none bg-transparent placeholder-[#9CA3AF] text-[#1D1C1D] leading-relaxed"
-            style={{ minHeight: 42, maxHeight: 160 }}
+            onKeyUp={refreshActive}
+            onMouseUp={refreshActive}
+            className="message-editor w-full overflow-y-auto px-4 py-2.5 text-[14px] leading-relaxed text-[#1D1C1D] focus:outline-none break-words"
+            style={{ minHeight: 44, maxHeight: MAX_INPUT_HEIGHT }}
           />
         )}
 
@@ -511,7 +650,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         <div className="flex items-center justify-between px-2 py-1.5">
           <div className="flex items-center gap-0.5">
             {/* Attach */}
-            <SecBtn title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={15} /></SecBtn>
+            <SecBtn title="Attach files" onClick={() => fileInputRef.current?.click()}><Paperclip size={15} /></SecBtn>
             <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
 
             {/* Emoji — same backdrop approach as message reactions */}
@@ -540,12 +679,10 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
             </div>
 
             {/* @ mention */}
-            <SecBtn title="Mention someone" onClick={() => { setBody((b) => b + '@'); textareaRef.current?.focus() }}>
+            <SecBtn title="Mention someone" onClick={() => insertText('@')}>
               <AtSign size={14} />
             </SecBtn>
 
-            {/* File (alternate) */}
-            <SecBtn title="Attach file" onClick={() => fileInputRef.current?.click()}><Paperclip size={14} /></SecBtn>
 
             {/* Voice */}
             <button
@@ -561,6 +698,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
             </button>
           </div>
 
+          <div className="flex items-center gap-1">
           <div className="relative">
             <button type="button" onClick={() => { setScheduleMin(new Date(Date.now() + 60000).toISOString().slice(0,16)); setScheduleOpen((value) => !value) }} disabled={!body.trim() || pendingFiles.length > 0} title="Schedule message" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#3589FA] disabled:cursor-not-allowed disabled:opacity-40"><Clock size={14}/></button>
             {scheduleOpen && <div className="absolute bottom-11 right-0 z-[210] w-72 rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-xl"><p className="mb-2 text-xs font-bold text-[#111827]">Schedule message</p><input type="datetime-local" value={scheduleFor} min={scheduleMin} onChange={(event) => setScheduleFor(event.target.value)} className="h-9 w-full rounded-lg border border-[#D1D5DB] px-2 text-xs text-[#111827]"/><div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setScheduleOpen(false)} className="h-8 rounded-lg px-3 text-xs font-semibold text-[#6B7280]">Cancel</button><button type="button" onClick={() => void handleSchedule()} disabled={!scheduleFor || isSending} className="h-8 rounded-lg bg-[#3589FA] px-3 text-xs font-bold text-white disabled:opacity-50">Schedule</button></div></div>}
@@ -581,16 +719,17 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
           >
             <Send size={14} className={canSend ? 'translate-x-px' : ''} />
           </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function FmtBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+function FmtBtn({ title, onClick, active, children }: { title: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
   return (
-    <button type="button" title={title} onClick={onClick}
-      className="w-6 h-6 flex items-center justify-center rounded text-[#9CA3AF] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-colors">
+    <button type="button" title={title} aria-label={title} aria-pressed={!!active} onMouseDown={(event) => event.preventDefault()} onClick={onClick}
+      className={cn('w-7 h-7 flex items-center justify-center rounded-md transition-colors', active ? 'bg-[#EBF5FF] text-[#3589FA]' : 'text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF]')}>
       {children}
     </button>
   )

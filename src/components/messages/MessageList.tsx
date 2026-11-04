@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState, type ReactNode } from 'react'
 import { Message } from './Message'
 import { MessageSkeleton } from '@/components/ui/Skeleton'
 import { formatDateDivider, sameDay } from '@/lib/utils'
 import { useMessages } from '@/hooks/useMessages'
 import type { Message as MessageType } from '@/types/database'
-import { Loader2, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react'
+import { Loader2, AlertCircle, RefreshCw, ArrowDown, SearchX } from 'lucide-react'
 
 interface MessageListProps {
   channelId: string
@@ -14,15 +14,18 @@ interface MessageListProps {
   onThreadOpen?: (message: MessageType) => void
   parentId?: string
   searchQuery?: string
+  /** Shown above the first message, e.g. a channel welcome. */
+  intro?: ReactNode
 }
 
-export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, searchQuery }: MessageListProps) {
+export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, searchQuery, intro }: MessageListProps) {
   const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useMessages(channelId, parentId, currentUserId)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const [showJump, setShowJump] = useState(false)
 
   const allMessages = data?.pages.flatMap((p) => p) ?? []
   const messages = searchQuery?.trim()
@@ -46,6 +49,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
     if (!el) return
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     isAtBottomRef.current = distFromBottom < 100
+    setShowJump(distFromBottom > 400)
 
     if (el.scrollTop < 100 && hasNextPage && !isFetchingNextPage) {
       const prevHeight = el.scrollHeight
@@ -87,29 +91,35 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
     )
   }
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && searchQuery?.trim()) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-[#EBF5FF] flex items-center justify-center mx-auto mb-3">
-            <span className="text-3xl">💬</span>
-          </div>
-          <h3 className="font-semibold text-[#111827] mb-1">No messages yet</h3>
-          <p className="text-sm text-[#6B7280]">Be the first to send a message!</p>
-        </div>
+      <div className="flex-1 px-4 pt-10 sm:px-6">
+        <SearchX size={28} className="text-[#D1D5DB]" />
+        <h3 className="mt-3 font-semibold text-[#111827]">No messages match &ldquo;{searchQuery.trim()}&rdquo;</h3>
+        <p className="mt-1 text-sm text-[#6B7280]">Try a different word or check the spelling.</p>
+      </div>
+    )
+  }
+
+  if (messages.length === 0) {
+    return intro ? <div className="flex-1 overflow-y-auto">{intro}</div> : (
+      <div className="flex-1 px-4 pt-10 sm:px-6">
+        <h3 className="font-semibold text-[#111827] mb-1">No messages yet</h3>
+        <p className="text-sm text-[#6B7280]">Be the first to send a message!</p>
       </div>
     )
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto py-2" onScroll={handleScroll}>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div ref={containerRef} className="flex-1 overflow-y-auto pb-2" onScroll={handleScroll}>
       {isFetchingNextPage && (
         <div className="flex justify-center py-2">
           <Loader2 size={16} className="animate-spin text-[#9CA3AF]" />
         </div>
       )}
 
-      <div />
+      {!hasNextPage && !searchQuery?.trim() && intro}
 
       {messages.map((message, index) => {
         const prev = messages[index - 1]
@@ -124,15 +134,12 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
         return (
           <div key={message.id}>
             {showDateDivider && (
-              <div className="text-center my-3 relative">
-                <hr className="absolute top-1/2 left-0 right-0 border-t border-[#E5E7EB]" />
-                <button
-                  type="button"
-                  className="relative inline-flex items-center gap-1 bg-white px-3 py-1 rounded-full text-xs text-[#6B7280] border border-[#E5E7EB] shadow-sm hover:bg-[#F9FAFB] hover:border-[#D1D5DB] transition-colors"
-                >
+              <div className="my-3 flex items-center gap-3 px-4 sm:px-6">
+                <span className="h-px flex-1 bg-[#E5E7EB]" />
+                <span className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-semibold text-[#374151] shadow-sm">
                   {formatDateDivider(message.created_at)}
-                  <ChevronDown size={11} className="opacity-60" />
-                </button>
+                </span>
+                <span className="h-px flex-1 bg-[#E5E7EB]" />
               </div>
             )}
             <Message
@@ -147,6 +154,16 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
       })}
 
       <div ref={bottomRef} />
+    </div>
+    {showJump && (
+      <button
+        type="button"
+        onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+        className="absolute bottom-3 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#3589FA] px-3.5 text-xs font-semibold text-white shadow-lg hover:bg-[#2575E8]"
+      >
+        <ArrowDown size={13} /> Jump to latest
+      </button>
+    )}
     </div>
   )
 }
