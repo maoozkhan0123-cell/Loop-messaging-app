@@ -5,7 +5,6 @@ import * as Dialog from "@radix-ui/react-dialog";
 import {
   Bell,
   BellOff,
-  ChevronDown,
   Link2,
   Loader2,
   Maximize2,
@@ -13,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { useTaskDetails, type TaskActionOutcome } from "@/hooks/useTaskDetails";
 import {
   addAttachmentBlob,
@@ -23,9 +23,8 @@ import {
 import { taskDetailsFromProjectTask } from "@/lib/taskMutations";
 import { deleteTaskCoverImage } from "@/lib/taskCover";
 import { TaskTitleEditor } from "./TaskTitleEditor";
-import { TaskCover } from "./TaskCover";
 import { TaskQuickActions } from "./TaskQuickActions";
-import { TaskProperties } from "./TaskProperties";
+import { StatusMenu } from "./StatusMenu";
 import { TaskDescriptionEditor } from "./TaskDescriptionEditor";
 import { TaskCommandPalette } from "./TaskCommandPalette";
 import { TaskActionsMenu } from "./TaskActionsMenu";
@@ -43,6 +42,7 @@ import type {
 } from "@/types/database";
 import type {
   TaskAttachment,
+  TaskReminder,
   TaskComment,
   TaskDetails,
   TaskMember,
@@ -93,6 +93,8 @@ export interface TaskDetailModalProps {
     taskId: string;
     comment: string;
   }) => Promise<ProjectTaskComment>;
+  /** Render inline as a full page instead of a modal dialog. */
+  asPage?: boolean;
 }
 
 export function TaskDetailModal(props: TaskDetailModalProps) {
@@ -110,6 +112,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     onMove,
     onAddComment,
     initialComments,
+    asPage = false,
   } = props;
   const availableColumns = props.availableColumns ?? columns;
   const { toast } = useToast();
@@ -260,8 +263,8 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     );
   }, [details]);
   const addChecklist = useCallback(() => {
-    const count = task?.checklists.length || 0;
-    details.addChecklist(count ? `Checklist ${count + 1}` : "Checklist");
+    // A task has a single checklist; once it exists, just scroll to it.
+    if (!task?.checklists.length) details.addChecklist("Checklist");
     setMobilePanel("details");
     details.setDetailsPanel("details");
     requestAnimationFrame(() =>
@@ -315,14 +318,22 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
   }, [busy, details, focusComment]);
 
   const hasUnsaved = titleDirty || descriptionDirty || commentDirty;
-  const requestClose = useCallback(() => {
+  const requestClose = useCallback(async () => {
     if (busy) return;
-    if (hasUnsaved && !confirm("Discard the unsaved task edits?")) return;
+    if (
+      hasUnsaved &&
+      !(await confirmDialog({
+        title: "Discard unsaved edits?",
+        description: "Your changes to this task haven't been saved yet.",
+        confirmLabel: "Discard",
+      }))
+    )
+      return;
     onClose();
   }, [busy, hasUnsaved, onClose]);
 
   if (!details.hydrated || !task)
-    return <LoadingDialog onClose={requestClose} />;
+    return asPage ? <LoadingPage /> : <LoadingDialog onClose={requestClose} />;
 
   const accept = (outcome: TaskActionOutcome, label: string) => {
     if (outcome.ok) return true;
@@ -423,6 +434,32 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
       () => onUpdate({ taskId: task.id, columnId: column.id }),
     );
   };
+  const changeDates = (
+    startDate: string,
+    dueDate: string,
+    reminder?: TaskReminder,
+  ) =>
+    syncBoard(
+      "dates",
+      "Dates",
+      () =>
+        details.setDates({
+          startDate: startDate || undefined,
+          dueDate: dueDate || undefined,
+          reminder,
+        }),
+      // Only send the dates that changed, so one field's save can't fail because of the other.
+      () =>
+        onUpdate({
+          taskId: task.id,
+          ...((startDate || "") !== (task.startDate || "")
+            ? { startDate: startDate || null }
+            : {}),
+          ...((dueDate || "") !== (task.dueDate || "")
+            ? { dueDate: dueDate || null }
+            : {}),
+        }),
+    );
   const changePriority = (priority: TaskPriority) => {
     void syncBoard(
       "priority",
@@ -584,7 +621,15 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     }
   };
   const moveToBoard = async (boardId: string) => {
-    if (!confirm("Move this task to the destination project?")) return;
+    if (
+      !(await confirmDialog({
+        title: "Move this task?",
+        description: "It will be moved to the destination project.",
+        confirmLabel: "Move",
+        danger: false,
+      }))
+    )
+      return;
     setBusy("move");
     try {
       const moved = await onMove({
@@ -615,9 +660,12 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
   };
   const archive = async () => {
     if (
-      !confirm(
-        "Archive this task? You can preserve its history without keeping it on the active board.",
-      )
+      !(await confirmDialog({
+        title: "Archive this task?",
+        description:
+          "Its history is kept, but it is removed from the active board.",
+        confirmLabel: "Archive",
+      }))
     )
       return;
     setBusy("archive");
@@ -643,9 +691,11 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
   };
   const moveToTrash = async () => {
     if (
-      !confirm(
-        "Move this task to trash? It can be restored until it is permanently deleted.",
-      )
+      !(await confirmDialog({
+        title: "Move this task to trash?",
+        description: "You can restore it until it is permanently deleted.",
+        confirmLabel: "Move to trash",
+      }))
     )
       return;
     setBusy("delete");
@@ -743,30 +793,8 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
 
   const fullscreen = details.preferences.isFullscreen;
   const watching = task.watcherIds.includes(actorId);
-  return (
-    <Dialog.Root
-      open
-      onOpenChange={(open) => {
-        if (!open) requestClose();
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-opacity duration-200 data-[state=closed]:opacity-0 data-[state=open]:opacity-100" />
-        <div
-          className={`pointer-events-none fixed inset-0 z-[51] flex items-center justify-center ${fullscreen ? "p-0" : "p-0 md:p-4"}`}
-        >
-          <Dialog.Content
-            aria-busy={Boolean(busy)}
-            onEscapeKeyDown={(event) => {
-              if (busy) event.preventDefault();
-            }}
-            onPointerDownOutside={(event) => {
-              if (busy) event.preventDefault();
-            }}
-            aria-describedby={undefined}
-            className={`task-workspace pointer-events-auto relative flex w-full flex-col overflow-hidden bg-white text-[var(--foreground)] shadow-2xl outline-none transition-[opacity,transform] duration-200 ease-out data-[state=closed]:pointer-events-none data-[state=closed]:scale-[.985] data-[state=closed]:opacity-0 data-[state=open]:scale-100 data-[state=open]:opacity-100 dark:bg-[#181B1F] ${fullscreen ? "h-dvh max-h-none max-w-none rounded-none" : "h-dvh max-h-none max-w-none rounded-none md:h-[88vh] md:max-h-[850px] md:max-w-5xl md:rounded-2xl"}`}
-          >
-            <Dialog.Title className="sr-only">{task.title}</Dialog.Title>
+  const workspaceBody = (
+    <>
             <header className="task-command-bar flex h-14 shrink-0 items-center gap-1.5 border-b border-[var(--ui-border)] bg-[var(--surface-raised)] px-2 sm:gap-3 sm:px-5">
               <nav
                 aria-label="Task breadcrumb"
@@ -801,29 +829,17 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
               <div className="min-w-0 flex-1 truncate text-[11px] font-semibold sm:hidden">
                 {task.key}
               </div>
-              <label className="relative w-[7.25rem] shrink-0 sm:w-auto">
-                <span className="sr-only">Workflow status</span>
-                <span
-                  className="pointer-events-none absolute left-2.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
-                  style={{ background: STATUS_META[task.status].color }}
-                />
-                <select
+              <div className="shrink-0">
+                <StatusMenu
+                  variant="field"
+                  columns={columns}
                   value={task.columnId}
-                  onChange={(event) => changeStatus(event.target.value)}
+                  statusOf={statusFromColumn}
+                  meta={STATUS_META}
+                  onChange={changeStatus}
                   disabled={Boolean(busy)}
-                  className="h-9 w-full appearance-none truncate rounded-lg border border-[var(--ui-border)] bg-[var(--surface)] pl-7 pr-6 text-[11px] font-semibold outline-none focus:border-[var(--primary)] sm:w-auto sm:max-w-48"
-                >
-                  {columns.map((column) => (
-                    <option key={column.id} value={column.id}>
-                      {column.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={12}
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
                 />
-              </label>
+              </div>
               <div className="flex shrink-0 items-center gap-0.5">
                 <span className="hidden min-[360px]:contents">
                   <IconButton
@@ -849,7 +865,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                 >
                   {watching ? <Bell size={15} /> : <BellOff size={15} />}
                 </IconButton>
-                <span className="hidden sm:contents">
+                <span className={asPage ? "hidden" : "hidden sm:contents"}>
                   <IconButton
                     label={fullscreen ? "Exit fullscreen" : "Open fullscreen"}
                     onClick={() => details.setFullscreen(!fullscreen)}
@@ -960,11 +976,6 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                 className={`${mobilePanel === "activity" ? "hidden md:block" : "block"} custom-scrollbar min-h-0 min-w-0 overscroll-contain overflow-y-auto p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:col-span-7 md:p-6 lg:col-span-8`}
               >
                 <div className="mx-auto max-w-3xl space-y-6">
-                  <TaskCover
-                    taskId={task.id}
-                    cover={task.cover}
-                    onChange={details.setCover}
-                  />
                   <TaskTitleEditor
                     title={task.title}
                     editSignal={titleEditSignal}
@@ -991,24 +1002,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                     onRemoveLabel={details.removeLabel}
                     onUpdateLabel={details.updateLabel}
                     onDeleteLabel={details.deleteLabel}
-                    onDates={(startDate, dueDate, reminder) =>
-                      syncBoard(
-                        "dates",
-                        "Dates",
-                        () =>
-                          details.setDates({
-                            startDate: startDate || undefined,
-                            dueDate: dueDate || undefined,
-                            reminder,
-                          }),
-                        () =>
-                          onUpdate({
-                            taskId: task.id,
-                            startDate: startDate || null,
-                            dueDate: dueDate || null,
-                          }),
-                      )
-                    }
+                    onDates={changeDates}
                     onPriority={changePriority}
                     onEstimate={(estimate) => {
                       void syncBoard(
@@ -1025,6 +1019,16 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                           }),
                       );
                     }}
+                    status={
+                      <StatusMenu
+                        columns={columns}
+                        value={task.columnId}
+                        statusOf={statusFromColumn}
+                        meta={STATUS_META}
+                        onChange={changeStatus}
+                        disabled={Boolean(busy)}
+                      />
+                    }
                     onChecklist={addChecklist}
                     onAttachment={openAttachments}
                     onDependency={(targetId, relation) => {
@@ -1042,11 +1046,6 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                       const outcome = details.addDependency(targetId, relation);
                       accept(outcome, "Dependency");
                     }}
-                  />
-                  <TaskProperties
-                    task={task}
-                    members={members}
-                    labels={details.labels}
                   />
                   <TaskDescriptionEditor
                     value={task.description}
@@ -1194,6 +1193,45 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
               onCopyLink={() => void copyLink()}
               onArchive={() => void archive()}
             />
+    </>
+  );
+
+  if (asPage)
+    return (
+      <section
+        aria-label={task.title}
+        aria-busy={Boolean(busy)}
+        className="task-workspace relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white text-[var(--foreground)] dark:bg-[#181B1F]"
+      >
+        {workspaceBody}
+      </section>
+    );
+
+  return (
+    <Dialog.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) requestClose();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-opacity duration-200 data-[state=closed]:opacity-0 data-[state=open]:opacity-100" />
+        <div
+          className={`pointer-events-none fixed inset-0 z-[51] flex items-center justify-center ${fullscreen ? "p-0" : "p-0 md:p-4"}`}
+        >
+          <Dialog.Content
+            aria-busy={Boolean(busy)}
+            onEscapeKeyDown={(event) => {
+              if (busy) event.preventDefault();
+            }}
+            onPointerDownOutside={(event) => {
+              if (busy) event.preventDefault();
+            }}
+            aria-describedby={undefined}
+            className={`task-workspace pointer-events-auto relative flex w-full flex-col overflow-hidden bg-white text-[var(--foreground)] shadow-2xl outline-none transition-[opacity,transform] duration-200 ease-out data-[state=closed]:pointer-events-none data-[state=closed]:scale-[.985] data-[state=closed]:opacity-0 data-[state=open]:scale-100 data-[state=open]:opacity-100 dark:bg-[#181B1F] ${fullscreen ? "h-dvh max-h-none max-w-none rounded-none" : "h-dvh max-h-none max-w-none rounded-none md:h-[88vh] md:max-h-[850px] md:max-w-5xl md:rounded-2xl"}`}
+          >
+            <Dialog.Title className="sr-only">{task.title}</Dialog.Title>
+            {workspaceBody}
           </Dialog.Content>
         </div>
       </Dialog.Portal>
@@ -1265,5 +1303,22 @@ function initials(name: string) {
     .toUpperCase();
 }
 function errorMessage(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Please try again.";
+  if (cause instanceof Error) return cause.message;
+  // Supabase errors are plain objects with a message, not Error instances.
+  if (cause && typeof cause === "object" && "message" in cause && typeof cause.message === "string")
+    return cause.message;
+  return "Please try again.";
+}
+
+function LoadingPage() {
+  return (
+    <div className="grid h-full flex-1 place-items-center bg-[var(--app-bg)]">
+      <div className="text-center">
+        <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
+        <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+          Preparing task workspace…
+        </p>
+      </div>
+    </div>
+  );
 }

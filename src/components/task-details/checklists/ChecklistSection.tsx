@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronUp, GripVertical, ListChecks, Plus, Trash2, X } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import type { Checklist, ChecklistItem, TaskMember } from '@/types/task'
 
 export type ChecklistActions = {
@@ -16,40 +17,49 @@ export type ChecklistActions = {
   reorderItems: (checklistId:string,orderedIds:string[]) => void
 }
 
+// All of a task's checklists render as one box: one heading, one progress bar, one item list.
 export function ChecklistSection({checklists,members,actions}:{checklists:Checklist[];members:TaskMember[];actions:ChecklistActions}) {
   const [addingChecklist,setAddingChecklist]=useState(false)
   const [title,setTitle]=useState('')
+  const [newItem,setNewItem]=useState('')
+  const [addingItem,setAddingItem]=useState(false)
+  const [dragged,setDragged]=useState<{checklistId:string;itemId:string}|null>(null)
   const ordered=useMemo(() => [...checklists].sort((a,b) => a.order-b.order),[checklists])
   const totals=useMemo(() => checklists.reduce((acc,list) => ({total:acc.total+list.items.length,done:acc.done+list.items.filter((item) => item.completed).length}),{total:0,done:0}),[checklists])
   const percent=totals.total?Math.round(totals.done/totals.total*100):0
+  const hideDone=ordered.length>0&&ordered.every((list) => list.hideCompleted)
+  const primary=ordered[0]
   const create=() => { const value=title.trim(); if (!value) return; actions.addChecklist(value); setTitle(''); setAddingChecklist(false) }
-  const moveChecklist=(id:string,direction:-1|1) => { const index=ordered.findIndex((item) => item.id===id); const target=index+direction; if (target<0||target>=ordered.length) return; const ids=ordered.map((item) => item.id); [ids[index],ids[target]]=[ids[target],ids[index]]; actions.reorderChecklists(ids) }
-  return <section aria-labelledby="checklists-heading" className="space-y-3"><div className="flex items-center justify-between gap-3"><div><h2 id="checklists-heading" className="flex items-center gap-2 text-sm font-semibold"><ListChecks size={16} className="text-[var(--primary)]"/>Checklists</h2><p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">{totals.done} of {totals.total} items completed{totals.total?` · ${percent}%`:''}</p></div><button type="button" onClick={() => setAddingChecklist(true)} className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--ui-border)] px-2.5 text-xs font-semibold hover:bg-[var(--surface-muted)]"><Plus size={13}/>Checklist</button></div>
-    {totals.total>0 && <Progress value={percent}/>}
+  const addItem=(keepOpen=false) => { const text=newItem.trim(); if (!text||!primary) return; actions.addItem(primary.id,text); setNewItem(''); setAddingItem(keepOpen) }
+  const toggleHideDone=() => ordered.filter((list) => list.hideCompleted===hideDone).forEach((list) => actions.toggleHideCompleted(list.id))
+  const deleteAll=async () => {
+    if (!(await confirmDialog({title:'Delete this checklist?',description:`All ${totals.total} ${totals.total===1?'item':'items'} will be removed from this task.`}))) return
+    ordered.forEach((list) => actions.deleteChecklist(list.id))
+  }
+
+  return <section aria-labelledby="checklists-heading" className="space-y-3">
+    <div><h2 id="checklists-heading" className="flex items-center gap-2 text-sm font-semibold"><ListChecks size={16} className="text-[var(--primary)]"/>Checklist</h2><p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">{totals.done} of {totals.total} items completed{totals.total?` · ${percent}%`:''}</p></div>
     {addingChecklist && <div className="flex gap-2 rounded-lg border border-[var(--ui-border)] bg-[var(--surface-raised)] p-2"><input autoFocus value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key==='Enter') create(); if (event.key==='Escape') setAddingChecklist(false) }} placeholder="Checklist title" className="h-8 min-w-0 flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--surface)] px-2.5 text-xs outline-none focus:border-[var(--primary)]"/><button type="button" disabled={!title.trim()} onClick={create} className="grid h-8 w-8 place-items-center rounded-md bg-[var(--primary)] text-white disabled:opacity-40" aria-label="Create checklist"><Check size={14}/></button><button type="button" onClick={() => setAddingChecklist(false)} className="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--surface-muted)]" aria-label="Cancel"><X size={14}/></button></div>}
-    {ordered.map((checklist,index) => <ChecklistBlock key={checklist.id} checklist={checklist} members={members} actions={actions} canMoveUp={index>0} canMoveDown={index<ordered.length-1} onMove={(direction) => moveChecklist(checklist.id,direction)}/>) }
+    {primary && <article className="rounded-xl border border-[var(--ui-border)] bg-[var(--surface)]">
+      <header className="flex items-center gap-3 border-b border-[var(--ui-border)] px-3 py-2.5">
+        <div className="min-w-0 flex-1"><Progress value={percent}/></div>
+        <span className="shrink-0 text-[10px] font-semibold text-[var(--muted-foreground)]">{totals.done}/{totals.total} · {percent}%</span>
+        <button type="button" onClick={toggleHideDone} className="rounded px-1.5 py-1 text-[10px] font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]">{hideDone?'Show all':'Hide done'}</button>
+        <button type="button" onClick={() => void deleteAll()} className="grid h-7 w-7 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-red-500/10 hover:text-[var(--danger)]" aria-label="Delete checklist"><Trash2 size={13}/></button>
+      </header>
+      <div className="divide-y divide-[var(--ui-border)]">
+        {ordered.flatMap((list) => {
+          const items=[...list.items].sort((a,b) => a.order-b.order)
+          const move=(itemId:string,direction:-1|1) => { const index=items.findIndex((item) => item.id===itemId); const target=index+direction; if (target<0||target>=items.length) return; const ids=items.map((item) => item.id); [ids[index],ids[target]]=[ids[target],ids[index]]; actions.reorderItems(list.id,ids) }
+          const dropBefore=(targetId:string) => { if (!dragged||dragged.checklistId!==list.id||dragged.itemId===targetId) return; const ids=items.map((item) => item.id).filter((id) => id!==dragged.itemId); ids.splice(ids.indexOf(targetId),0,dragged.itemId); actions.reorderItems(list.id,ids); setDragged(null) }
+          return (list.hideCompleted?items.filter((item) => !item.completed):items).map((item) => <ChecklistItemRow key={item.id} item={item} checklistId={list.id} members={members} onUpdate={actions.updateItem} onDelete={actions.deleteItem} onMove={(direction) => move(item.id,direction)} canMoveUp={items[0]?.id!==item.id} canMoveDown={items.at(-1)?.id!==item.id} drag={{onStart:()=>setDragged({checklistId:list.id,itemId:item.id}),onOver:(event) => event.preventDefault(),onDrop:()=>dropBefore(item.id)}}/>)
+        })}
+      </div>
+      <footer className="p-2">{addingItem?<div className="flex gap-2"><input autoFocus value={newItem} maxLength={240} onChange={(event) => setNewItem(event.target.value)} onKeyDown={(event) => { if (event.key==='Enter') addItem(event.shiftKey); if (event.key==='Escape') { setNewItem(''); setAddingItem(false) } }} placeholder="Add an item" className="h-8 min-w-0 flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--surface)] px-2.5 text-xs outline-none focus:border-[var(--primary)]"/><button type="button" disabled={!newItem.trim()} onClick={() => addItem()} className="rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white disabled:opacity-40">Add</button><button type="button" onClick={() => { setNewItem(''); setAddingItem(false) }} className="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--surface-muted)]" aria-label="Cancel"><X size={13}/></button></div>:<button type="button" onClick={() => setAddingItem(true)} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"><Plus size={13}/>Add item</button>}</footer>
+    </article>}
     {!checklists.length&&!addingChecklist && <button type="button" onClick={() => setAddingChecklist(true)} className="w-full rounded-xl border border-dashed border-[var(--ui-border)] px-4 py-7 text-xs text-[var(--muted-foreground)] transition hover:border-[var(--primary)] hover:bg-[var(--primary-soft)] hover:text-[var(--primary)]">Break the work into trackable checklist items</button>}
   </section>
 }
-
-function ChecklistBlock({checklist,members,actions,canMoveUp,canMoveDown,onMove}:{checklist:Checklist;members:TaskMember[];actions:ChecklistActions;canMoveUp:boolean;canMoveDown:boolean;onMove:(direction:-1|1)=>void}) {
-  const [newItem,setNewItem]=useState('')
-  const [adding,setAdding]=useState(false)
-  const [draggedId,setDraggedId]=useState<string|null>(null)
-  const ordered=[...checklist.items].sort((a,b) => a.order-b.order)
-  const visible=checklist.hideCompleted?ordered.filter((item) => !item.completed):ordered
-  const completed=checklist.items.filter((item) => item.completed).length
-  const progress=checklist.items.length?Math.round(completed/checklist.items.length*100):0
-  const add=(keepOpen=false) => { const text=newItem.trim(); if (!text) return; actions.addItem(checklist.id,text); setNewItem(''); setAdding(keepOpen) }
-  const move=(itemId:string,direction:-1|1) => { const index=ordered.findIndex((item) => item.id===itemId); const target=index+direction; if (target<0||target>=ordered.length) return; const ids=ordered.map((item) => item.id); [ids[index],ids[target]]=[ids[target],ids[index]]; actions.reorderItems(checklist.id,ids) }
-  const dropBefore=(targetId:string) => { if (!draggedId||draggedId===targetId) return; const ids=ordered.map((item) => item.id).filter((id) => id!==draggedId); ids.splice(ids.indexOf(targetId),0,draggedId); actions.reorderItems(checklist.id,ids); setDraggedId(null) }
-  return <article className="rounded-xl border border-[var(--ui-border)] bg-[var(--surface)]"><header className="border-b border-[var(--ui-border)] p-3"><div className="flex items-center gap-1.5"><EditableChecklistTitle checklist={checklist} onSave={(title) => actions.renameChecklist(checklist.id,title)}/><span className="shrink-0 text-[10px] font-semibold text-[var(--muted-foreground)]">{completed}/{checklist.items.length} · {progress}%</span><button type="button" disabled={!canMoveUp} onClick={() => onMove(-1)} className="grid h-7 w-7 place-items-center rounded hover:bg-[var(--surface-muted)] disabled:opacity-30" aria-label={`Move ${checklist.title} up`}><ChevronUp size={13}/></button><button type="button" disabled={!canMoveDown} onClick={() => onMove(1)} className="grid h-7 w-7 place-items-center rounded hover:bg-[var(--surface-muted)] disabled:opacity-30" aria-label={`Move ${checklist.title} down`}><ChevronDown size={13}/></button><button type="button" onClick={() => actions.toggleHideCompleted(checklist.id)} className="rounded px-1.5 py-1 text-[10px] font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]">{checklist.hideCompleted?'Show all':'Hide done'}</button><button type="button" onClick={() => { if (confirm(`Delete “${checklist.title}”?`)) actions.deleteChecklist(checklist.id) }} className="grid h-7 w-7 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-red-500/10 hover:text-[var(--danger)]" aria-label={`Delete ${checklist.title}`}><Trash2 size={13}/></button></div><Progress value={progress} compact/></header>
-    <div className="divide-y divide-[var(--ui-border)]">{visible.map((item) => <ChecklistItemRow key={item.id} item={item} checklistId={checklist.id} members={members} onUpdate={actions.updateItem} onDelete={actions.deleteItem} onMove={(direction) => move(item.id,direction)} canMoveUp={ordered[0]?.id!==item.id} canMoveDown={ordered.at(-1)?.id!==item.id} drag={{onStart:()=>setDraggedId(item.id),onOver:(event) => event.preventDefault(),onDrop:()=>dropBefore(item.id)}}/>)}</div>
-    <footer className="p-2">{adding?<div className="flex gap-2"><input autoFocus value={newItem} maxLength={240} onChange={(event) => setNewItem(event.target.value)} onKeyDown={(event) => { if (event.key==='Enter') add(event.shiftKey); if (event.key==='Escape') { setNewItem(''); setAdding(false) } }} placeholder="Add an item" className="h-8 min-w-0 flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--surface)] px-2.5 text-xs outline-none focus:border-[var(--primary)]"/><button type="button" disabled={!newItem.trim()} onClick={() => add()} className="rounded-md bg-[var(--primary)] px-2.5 text-xs font-semibold text-white disabled:opacity-40">Add</button><button type="button" onClick={() => { setNewItem(''); setAdding(false) }} className="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--surface-muted)]" aria-label="Cancel"><X size={13}/></button></div>:<button type="button" onClick={() => setAdding(true)} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"><Plus size={13}/>Add item</button>}</footer>
-  </article>
-}
-
-function EditableChecklistTitle({checklist,onSave}:{checklist:Checklist;onSave:(title:string)=>void}) { const [value,setValue]=useState(checklist.title); useEffect(() => setValue(checklist.title),[checklist.title]); const commit=() => { const next=value.trim(); if (!next) setValue(checklist.title); else if (next!==checklist.title) onSave(next) }; return <input value={value} maxLength={120} onChange={(event) => setValue(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key==='Enter') event.currentTarget.blur(); if (event.key==='Escape') { setValue(checklist.title); event.currentTarget.blur() } }} aria-label="Checklist title" className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none focus:rounded focus:ring-2 focus:ring-[var(--focus-ring)]"/> }
 
 function ChecklistItemRow({item,checklistId,members,onUpdate,onDelete,onMove,canMoveUp,canMoveDown,drag}:{item:ChecklistItem;checklistId:string;members:TaskMember[];onUpdate:ChecklistActions['updateItem'];onDelete:ChecklistActions['deleteItem'];onMove:(direction:-1|1)=>void;canMoveUp:boolean;canMoveDown:boolean;drag:{onStart:()=>void;onOver:(event:React.DragEvent)=>void;onDrop:()=>void}}) {
   const [text,setText]=useState(item.text)

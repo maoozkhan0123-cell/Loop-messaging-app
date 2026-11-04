@@ -33,7 +33,7 @@ describe('ActivityPanel',() => {
     await waitFor(() => expect(addComment).toHaveBeenCalledWith('Review with @AdaLovelace',undefined,['member-1'],[]))
   })
 
-  it('supports comment replies, editing, deletion, and accessible reactions',() => {
+  it('supports comment replies, editing, deletion, and accessible reactions',async () => {
     const reaction='\u2705'
     const comments:TaskComment[]=[
       {id:'comment-1',taskId:'task-1',authorId:'member-1',body:'Ready for review',mentionIds:[],attachmentIds:[],reactions:{[reaction]:['member-1']},createdAt:'2026-11-02T10:00:00.000Z'},
@@ -65,7 +65,7 @@ describe('ActivityPanel',() => {
 
     fireEvent.click(screen.getByRole('button',{name:'Delete comment'}))
     expect(confirm).toHaveBeenCalledWith('Delete this comment?')
-    expect(actions.deleteComment).toHaveBeenCalledWith('comment-1')
+    await waitFor(() => expect(actions.deleteComment).toHaveBeenCalledWith('comment-1'))
     confirm.mockRestore()
   })
 })

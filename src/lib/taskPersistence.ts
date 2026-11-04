@@ -95,7 +95,7 @@ export function createDefaultTaskUiPreferences(now = new Date().toISOString()): 
   return {
     schemaVersion: TASK_UI_SCHEMA_VERSION,
     revision: 0,
-    activityFilter: 'all',
+    activityFilter: 'comments',
     isFullscreen: false,
     detailsPanel: 'details',
     updatedAt: now,

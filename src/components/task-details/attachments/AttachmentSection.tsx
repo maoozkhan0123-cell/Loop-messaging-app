@@ -10,6 +10,7 @@ import {
   revokeAttachmentObjectUrl,
 } from '@/lib/attachmentStorage'
 import type { TaskAttachment } from '@/types/task'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 
 interface AttachmentSectionProps {
   attachments: TaskAttachment[]
@@ -92,7 +93,7 @@ export function AttachmentSection({ attachments, onUpload, onRemove }: Attachmen
   }
 
   const remove = async (attachment: TaskAttachment) => {
-    if (!window.confirm(`Remove “${attachment.name}”?`)) return
+    if (!(await confirmDialog({ title: `Remove “${attachment.name}”?`, description: 'The file will be removed from this task.', confirmLabel: 'Remove' }))) return
     setRemovingId(attachment.id)
     setError(null)
     try {

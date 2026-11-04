@@ -48,9 +48,9 @@ describe('TaskDetailModal',() => {
     expect(detailsTab).toHaveAttribute('aria-selected','false')
     fireEvent.click(detailsTab)
 
-    const status=workspace.getByRole('combobox',{name:'Workflow status'})
-    expect(status).toHaveValue('column-1')
-    fireEvent.change(status,{target:{value:'column-2'}})
+    const status=workspace.getAllByRole('button',{name:'Status: To Do'})[0]
+    fireEvent.click(status)
+    fireEvent.click(await screen.findByRole('button',{name:'In Progress'}))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({taskId:'modal-smoke-task',columnId:'column-2'}))
 
     const composer=workspace.getByRole('combobox',{name:'Write a comment'})
