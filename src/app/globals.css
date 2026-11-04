@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `dark:` follows the in-app theme (html[data-theme]) rather than the OS preference. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 @layer components {
   .member-input {
     @apply w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 outline-none transition;
@@ -347,3 +350,14 @@ body {
     text-decoration: none !important;
   }
 }
+
+/* Message composer (rich text) */
+.message-editor:empty::before { content: attr(data-placeholder); color: #9CA3AF; pointer-events: none; }
+.message-editor b, .message-editor strong { font-weight: 700; }
+.message-editor ul { list-style: disc; padding-left: 1.5rem; }
+.message-editor ol { list-style: decimal; padding-left: 1.5rem; }
+.message-editor blockquote { border-left: 4px solid #D1D5DB; padding-left: 0.75rem; color: #4B5563; }
+.message-editor pre { margin: 0.25rem 0; padding: 0.5rem 0.75rem; border: 1px solid #E5E7EB; border-radius: 0.5rem; background: #F8FAFC; font-family: ui-monospace, monospace; font-size: 12.5px; white-space: pre-wrap; }
+.message-editor code { border-radius: 0.25rem; background: #F3F4F6; padding: 0.1rem 0.25rem; font-family: ui-monospace, monospace; font-size: 12.5px; color: #E01E5A; }
+.message-editor a { color: #3589FA; text-decoration: underline; }
+

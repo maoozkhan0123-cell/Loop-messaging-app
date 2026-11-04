@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, MessagesSquare, FolderOpen, Smile, X, Camera, Loader2, Bell, BellOff, Kanban, Lightbulb, Hash, Users, Settings, Inbox, CalendarDays } from 'lucide-react'
+import { Home, MessagesSquare, FolderOpen, Smile, X, Camera, Loader2, Bell, BellOff, Kanban, Lightbulb, Users, Settings, Inbox, CalendarDays } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { Avatar } from '@/components/ui/Avatar'
 import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
@@ -16,9 +15,16 @@ import { PreferencesModal } from '@/components/PreferencesModal'
 interface IconRailProps {
   onOpenSidebar: () => void
   onCloseSidebar: () => void
+  /** Narrow icon-over-label rail (used in the mobile drawer). */
+  compact?: boolean
+  /** The workspace sidebar is open beside the rail, so the active tab joins into it instead of the page. */
+  joinsSidebar?: boolean
 }
 
-export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
+const RAIL_BG = '#171936'
+const SIDEBAR_BG = '#20234A'
+
+export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joinsSidebar = false }: IconRailProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { closeMobileMenu } = useMobileNav()
@@ -96,32 +102,22 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
 
   return (
     <aside
-      className="flex flex-col items-center flex-shrink-0 relative z-20 shadow-xl border-r border-white/10"
-      style={{ width: 70, background: '#171936', height: '100%', paddingTop: 10, paddingBottom: 12 }}
+      className={cn('flex flex-col flex-shrink-0 relative z-20', compact ? 'items-center' : 'items-stretch')}
+      style={{ width: compact ? 70 : 176, background: RAIL_BG, height: '100%', paddingBottom: 12, '--rail-tab': joinsSidebar ? SIDEBAR_BG : 'var(--app-bg)' } as React.CSSProperties}
     >
-      {/* Workspace logo */}
-      <button
-        type="button"
-        onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }}
-        title="Go to Home"
-        style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, display: 'block', marginBottom: 14 }}
-        className="hover:scale-105 transition-transform focus-visible:outline-none bg-white border border-white/20 shadow-md"
-      >
-        <Image src="/bysync-logo.svg" alt="BySync" width={44} height={44} priority style={{ objectFit: 'cover', display: 'block' }} />
-      </button>
-
       {/* Nav items */}
-      <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none]" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-        <RailBtn icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
-        <RailBtn icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />
-        <RailBtn icon={MessagesSquare} label="Messages" isActive={isMessages} onClick={() => { onOpenSidebar(); router.push('/messages') }} />
-        <RailBtn icon={Hash} label="Channels" isActive={pathname.includes('/channel')} onClick={() => { onOpenSidebar(); closeMobileMenu() }} />
-        <RailBtn icon={Users} label="Team" isActive={pathname === '/people'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/people') }} />
-        <RailBtn icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/files') }} />
-        <RailBtn icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/projects') }} />
-        <RailBtn icon={CalendarDays} label="Calendar" isActive={pathname === '/calendar'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/calendar') }} />
-        <RailBtn icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/ideas') }} />
-        <RailBtn icon={Settings} label="Settings" onClick={() => setPreferencesOpen(true)} />
+      <div
+        className={cn('min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] flex flex-col', compact ? 'items-center gap-px pt-3' : 'gap-1 pt-10 pb-4')}
+      >
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={MessagesSquare} label="Messages" isActive={isMessages} onClick={() => { onOpenSidebar(); router.push('/messages') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={Users} label="Team" isActive={pathname === '/people'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/people') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/files') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={Kanban} label="Projects" isActive={pathname === '/projects'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/projects') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={CalendarDays} label="Calendar" isActive={pathname === '/calendar'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/calendar') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={Lightbulb} label="Ideas" isActive={pathname === '/ideas'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/ideas') }} />
+        <RailBtn compact={compact} onDark={joinsSidebar} icon={Settings} label="Settings" onClick={() => setPreferencesOpen(true)} />
       </div>
 
       {/* Avatar upload input (hidden) */}
@@ -139,9 +135,9 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
           <Popover.Trigger asChild>
             <button
               type="button"
-              className="hover:opacity-90 transition-all focus-visible:outline-none relative"
-              style={{ width: 36, height: 36 }}
+              className={cn('hover:opacity-90 transition-all focus-visible:outline-none flex items-center gap-2.5 text-left', !compact && 'mx-3 rounded-xl px-2 py-1.5 hover:bg-white/10')}
             >
+              <span className="relative block flex-shrink-0" style={{ width: 36, height: 36 }}>
               {uploading ? (
                 <div className="w-9 h-9 flex items-center justify-center">
                   <Loader2 size={18} className="animate-spin text-white/60" />
@@ -153,10 +149,17 @@ export function IconRail({ onOpenSidebar, onCloseSidebar }: IconRailProps) {
                 style={{
                   position: 'absolute', bottom: -2, right: -2,
                   width: 12, height: 12, borderRadius: '50%',
-                  background: statusColor, border: '2px solid #111827',
+                  background: statusColor, border: `2px solid ${RAIL_BG}`,
                   display: profile.status === 'offline' || !profile.status ? 'none' : 'block'
                 }}
               />
+              </span>
+              {!compact && (
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold text-white">{profile.display_name}</span>
+                  <span className="block truncate text-[11px] text-blue-100/60">{profile.status === 'away' ? 'Away' : 'Active'}</span>
+                </span>
+              )}
             </button>
           </Popover.Trigger>
           <Popover.Portal>
@@ -282,31 +285,67 @@ function MenuItem({ onClick, label, rightLabel, icon }: { onClick: () => void; l
   )
 }
 
-function RailBtn({ icon: Icon, label, isActive, onClick }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; isActive?: boolean; onClick?: () => void }) {
+type RailBtnProps = {
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  label: string
+  isActive?: boolean
+  onClick?: () => void
+  compact?: boolean
+  onDark?: boolean
+}
+
+function RailBtn({ icon: Icon, label, isActive, onClick, compact, onDark }: RailBtnProps) {
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 0', gap: 2, cursor: 'pointer', background: 'none', border: 'none' }}
+        className="group"
+      >
+        <span
+          style={{
+            width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: isActive ? 'linear-gradient(135deg, #289ED8, #27AAE1)' : 'transparent',
+            boxShadow: isActive ? '0 6px 16px rgba(40,158,216,0.35)' : 'none',
+            transition: 'all 0.15s ease',
+          }}
+          className={cn(!isActive && 'group-hover:bg-white/15')}
+        >
+          <Icon size={18} className={cn('transition-all group-hover:scale-110', isActive ? 'text-white' : 'text-blue-100/65 group-hover:text-white')} />
+        </span>
+        <span
+          style={{ fontSize: 10, lineHeight: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}
+          className={cn('transition-colors', isActive ? 'text-white font-bold' : 'text-blue-100/60 group-hover:text-white')}
+        >
+          {label}
+        </span>
+      </button>
+    )
+  }
+
+  // Wide rail: the active item is a tab in the page colour that runs into the content area,
+  // with inverted corners above and below so both read as one shape.
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 0', gap: 2, cursor: 'pointer', background: 'none', border: 'none' }}
-      className="group"
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(
+        'group relative ml-3 flex h-11 flex-shrink-0 items-center gap-3 pl-4 pr-3 text-left text-[13.5px] transition-colors',
+        isActive
+          ? cn('rounded-l-2xl bg-[var(--rail-tab)] font-semibold', onDark ? 'text-white' : 'text-[var(--primary)]')
+          : 'mr-3 rounded-xl font-medium text-blue-100/65 hover:bg-white/10 hover:text-white'
+      )}
     >
-      <span
-        style={{
-          width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: isActive ? 'linear-gradient(135deg, #289ED8, #27AAE1)' : 'transparent',
-          boxShadow: isActive ? '0 6px 16px rgba(40,158,216,0.35)' : 'none',
-          transition: 'all 0.15s ease',
-        }}
-        className={cn(!isActive && 'group-hover:bg-white/15')}
-      >
-        <Icon size={18} className={cn('transition-all group-hover:scale-110', isActive ? 'text-white' : 'text-blue-100/65 group-hover:text-white')} />
-      </span>
-      <span
-        style={{ fontSize: 10, lineHeight: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}
-        className={cn('transition-colors', isActive ? 'text-white font-bold' : 'text-blue-100/60 group-hover:text-white')}
-      >
-        {label}
-      </span>
+      {isActive && (
+        <>
+          <span aria-hidden className="pointer-events-none absolute -top-4 right-0 h-4 w-4" style={{ background: 'radial-gradient(circle at 0 0, transparent 15.5px, var(--rail-tab) 16px)' }} />
+          <span aria-hidden className="pointer-events-none absolute -bottom-4 right-0 h-4 w-4" style={{ background: 'radial-gradient(circle at 0 100%, transparent 15.5px, var(--rail-tab) 16px)' }} />
+        </>
+      )}
+      <Icon size={18} className={cn('flex-shrink-0 transition-transform', !isActive && 'group-hover:scale-110')} />
+      <span className="truncate">{label}</span>
     </button>
   )
 }

@@ -10,6 +10,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { useChannels } from '@/hooks/useChannels'
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications'
 import { X } from 'lucide-react'
+import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog'
 import { createClient } from '@/lib/supabase/client'
 
 interface MobileNavContextType {
@@ -30,7 +31,7 @@ export const useMobileNav = () => useContext(MobileNavContext)
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isMessagingRoute = pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people'
+  const isMessagingRoute = pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/')
   const [sidebarOpen, setSidebarOpen] = useState(isMessagingRoute)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { data: myProfile } = useProfile()
@@ -58,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Auto-close mobile navigation drawer on route change
   useEffect(() => {
     setMobileMenuOpen(false)
-    setSidebarOpen(pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/') || pathname === '/people')
+    setSidebarOpen(pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/'))
   }, [pathname])
 
   // Stable channel ID list — used by global notification subscription.
@@ -79,14 +80,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--app-bg)' }}>
         {/* ── Top toolbar: spans full width ── */}
         <Toolbar />
+        <ConfirmDialogHost />
 
         {/* ── Body: sidebar (desktop/mobile) + content ── */}
-        <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        <div className="flex flex-1 min-h-0 overflow-hidden relative md:pt-2" style={{ background: '#171936' }}>
           {/* Desktop view: side-by-side icon rail + workspace sidebar */}
           <div className="hidden md:flex flex-shrink-0 h-full">
             <IconRail
               onOpenSidebar={() => setSidebarOpen(true)}
               onCloseSidebar={() => setSidebarOpen(false)}
+              joinsSidebar={sidebarOpen}
             />
 
             <AnimatePresence initial={false}>
@@ -97,7 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   animate={{ width: 260, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
                   transition={{ duration: 0.18, ease: 'easeInOut' }}
-                  className="flex-shrink-0 h-full overflow-hidden"
+                  className="flex-shrink-0 h-full overflow-hidden md:rounded-tl-2xl"
                 >
                   <Sidebar />
                 </motion.div>
@@ -131,6 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <div className="flex h-full">
                     <IconRail
+                      compact
                       onOpenSidebar={() => {}}
                       onCloseSidebar={closeMobileMenu}
                     />
@@ -153,7 +157,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
 
           {/* Main content area */}
-          <div className="flex flex-1 min-w-0 h-full bg-white md:rounded-tl-xl overflow-hidden border border-[var(--ui-border)] shadow-sm">
+          <div className="flex flex-1 min-w-0 h-full overflow-hidden md:rounded-tl-2xl" style={{ background: 'var(--app-bg)' }}>
             {children}
           </div>
         </div>
