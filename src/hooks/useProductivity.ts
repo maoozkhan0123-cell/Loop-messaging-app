@@ -2,16 +2,16 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import type { Message, ProjectTask, ScheduledMessage, WorkspaceEvent } from '@/types/database'
+import type { Profile, ProjectTask, ScheduledMessage, WorkspaceEvent } from '@/types/database'
 
 export type InboxItem = {
   id: string
-  kind: 'mention' | 'message' | 'task'
-  title: string
-  detail: string
+  task: ProjectTask
+  assigner: Profile | null
+  done: boolean
+  commentsCount: number
   createdAt: string
   href: string
-  unread?: boolean
 }
 
 export function useUnifiedInbox(userId?: string) {
@@ -20,37 +20,33 @@ export function useUnifiedInbox(userId?: string) {
     queryKey: ['unified-inbox', userId],
     enabled: !!userId,
     refetchInterval: 30_000,
+    // The inbox only lists tasks assigned to the user; messages live in Messages.
     queryFn: async () => {
-      const [messagesResult, tasksResult, membershipsResult] = await Promise.all([
-        supabase.from('messages').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(80),
-        supabase.from('project_tasks').select('*').eq('assignee_id', userId!).order('created_at', { ascending: false }).limit(30),
-        supabase.from('channel_members').select('channel_id,last_read_at').eq('user_id', userId!),
+      const { data, error } = await supabase.from('project_tasks').select('*').eq('assignee_id', userId!).order('created_at', { ascending: false }).limit(100)
+      if (error) throw error
+      const tasks = ((data ?? []) as ProjectTask[]).filter((task) => !task.archived_at)
+      if (!tasks.length) return [] as InboxItem[]
+
+      const creatorIds = [...new Set(tasks.map((task) => task.created_by).filter((id): id is string => !!id))]
+      const [profilesResult, columnsResult, commentsResult] = await Promise.all([
+        creatorIds.length ? supabase.from('profiles').select('*').in('id', creatorIds) : Promise.resolve({ data: [] }),
+        supabase.from('project_columns').select('id,name').in('board_id', [...new Set(tasks.map((task) => task.board_id))]),
+        supabase.from('project_task_comments').select('task_id').in('task_id', tasks.map((task) => task.id)),
       ])
-      if (messagesResult.error) throw messagesResult.error
-      if (tasksResult.error) throw tasksResult.error
-      const memberships = (membershipsResult.data ?? []) as Array<{ channel_id: string; last_read_at: string }>
-      const lastRead = new Map<string, string>(memberships.map((row) => [row.channel_id, row.last_read_at]))
-      const messages = (messagesResult.data ?? []) as Message[]
-      const tasks = (tasksResult.data ?? []) as ProjectTask[]
-      const messageItems: InboxItem[] = messages
-        .filter((message) => message.user_id !== userId)
-        .map((message) => {
-          const mention = !!message.body?.toLowerCase().includes('@')
-          return {
-            id: `message-${message.id}`,
-            kind: mention ? 'mention' : 'message',
-            title: mention ? 'Mentioned in a conversation' : 'New message',
-            detail: message.body || 'Shared an attachment',
-            createdAt: message.created_at,
-            href: `/channel/${message.channel_id}?message=${message.id}`,
-            unread: new Date(message.created_at) > new Date(lastRead.get(message.channel_id) ?? 0),
-          }
-        })
-      const taskItems: InboxItem[] = tasks.map((task) => ({
-        id: `task-${task.id}`, kind: 'task', title: 'Task assigned to you', detail: task.title,
-        createdAt: task.created_at, href: `/projects?task=${task.id}`, unread: true,
+      const profiles = new Map(((profilesResult.data ?? []) as Profile[]).map((profile) => [profile.id, profile]))
+      const doneColumns = new Set(((columnsResult.data ?? []) as Array<{ id: string; name: string }>).filter((column) => /done|complete/i.test(column.name)).map((column) => column.id))
+      const commentCounts = new Map<string, number>()
+      for (const row of (commentsResult.data ?? []) as Array<{ task_id: string }>) commentCounts.set(row.task_id, (commentCounts.get(row.task_id) ?? 0) + 1)
+
+      return tasks.map((task): InboxItem => ({
+        id: task.id,
+        task,
+        assigner: task.created_by ? profiles.get(task.created_by) ?? null : null,
+        done: doneColumns.has(task.column_id),
+        commentsCount: commentCounts.get(task.id) ?? 0,
+        createdAt: task.created_at,
+        href: `/projects?board=${task.board_id}&task=${task.id}`,
       }))
-      return [...messageItems, ...taskItems].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     },
   })
 }
