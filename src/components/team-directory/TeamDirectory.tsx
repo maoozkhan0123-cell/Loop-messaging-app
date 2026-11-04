@@ -58,9 +58,9 @@ export function TeamDirectory({ members, loading, error, canInvite, messagingMem
   const clearFilters = () => { setSearch(''); setStatus('all'); setRole('all') }
 
   return (
-    <div className="flex h-full min-w-0 flex-col bg-[var(--app-bg)] text-[var(--foreground)]">
+    <div className="flex h-full min-w-0 flex-1 flex-col bg-[var(--app-bg)] text-[var(--foreground)]">
       <header className="shrink-0 border-b border-[var(--ui-border)] bg-[var(--surface)] px-4 py-4 sm:px-6">
-        <div className="mx-auto max-w-[1600px]">
+        <div>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -92,7 +92,7 @@ export function TeamDirectory({ members, loading, error, canInvite, messagingMem
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-        <div className="mx-auto max-w-[1600px]">
+        <div>
           {loading ? <DirectorySkeleton /> : error ? <ErrorState message={error} onRetry={onRetry} /> : members.length === 0 ? <EmptyState canInvite={canInvite} onInvite={onInvite} /> : filtered.length === 0 ? <NoResults onClear={clearFilters} /> : view === 'table' ? (
             <MemberTable members={filtered} sort={sort} ascending={ascending} messagingMemberId={messagingMemberId} onSort={(next) => { if (sort === next) setAscending((value) => !value); else { setSort(next); setAscending(true) } }} onView={onView} onMessage={onMessage} onManage={onManage} onCopyEmail={onCopyEmail} />
           ) : (
@@ -140,7 +140,7 @@ export function MemberCard({ member, messagingMemberId, onView, onMessage, onMan
       <h3 className="truncate pr-7 text-sm font-semibold leading-5" title={member.display_name}>{member.display_name}</h3>
       <RoleBadge member={member} />
       <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]" title={member.email}>{member.email}</p>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onMessage(member) }} disabled={messagingMemberId === member.id || member.suspended} className="pointer-events-auto mt-2 hidden h-7 items-center gap-1.5 rounded-md bg-[var(--primary-soft)] px-2.5 text-[11px] font-semibold text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 group-hover:inline-flex group-focus-within:inline-flex sm:inline-flex md:hidden md:group-hover:inline-flex md:group-focus-within:inline-flex">
+      <button type="button" onClick={(event) => { event.stopPropagation(); onMessage(member) }} disabled={messagingMemberId === member.id || member.suspended} className="pointer-events-auto mt-2 inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--primary-soft)] px-2.5 text-[11px] font-semibold text-[var(--primary)] transition-[background-color,color,opacity] hover:bg-[var(--primary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
         {messagingMemberId === member.id ? <Loader2 size={12} className="animate-spin" /> : <MessageSquare size={12} />}Message
       </button>
     </div>

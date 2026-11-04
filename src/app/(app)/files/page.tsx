@@ -70,7 +70,7 @@ export default function FilesPage() {
   counts.other = (files ?? []).length - counts.images - counts.documents
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-1 min-w-0 flex-col h-full bg-white">
       {/* Header */}
       <div className="border-b border-[#DDE8F2] px-4 sm:px-6 pt-4 sm:pt-5 pb-0 flex-shrink-0 bg-[#F8FBFD]">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

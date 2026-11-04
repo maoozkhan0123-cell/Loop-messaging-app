@@ -53,7 +53,7 @@ export default function IdeasPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
+    <div className="flex-1 min-w-0 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
       {/* Page Header */}
       <header className="bg-white border-b border-[#E4E4E7] px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 flex-shrink-0 shadow-2xs">
         <div className="flex items-center gap-2.5 sm:gap-3">
@@ -92,14 +92,14 @@ export default function IdeasPage() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-4xl w-full mx-auto space-y-4">
+      <main className="flex-1 p-4 sm:p-6 overflow-y-auto w-full space-y-4">
         {isLoading ? (
           <div className="py-20 flex items-center justify-center text-[#A1A1AA] text-sm gap-2">
             <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
             Loading team ideas...
           </div>
         ) : filteredIdeas.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-[#E4E4E7] shadow-xs max-w-md mx-auto my-8">
+          <div className="bg-white rounded-2xl p-12 text-center border border-[#E4E4E7] shadow-xs max-w-md">
             <div className="w-14 h-14 rounded-2xl bg-[#F4F4F5] flex items-center justify-center text-black mx-auto mb-3 border border-[#E4E4E7]">
               <Sparkles size={28} />
             </div>
@@ -116,7 +116,7 @@ export default function IdeasPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             {filteredIdeas.map((idea) => {
               const statusCfg = STATUS_CONFIG[idea.status] || STATUS_CONFIG.under_review
 
