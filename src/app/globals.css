@@ -235,6 +235,14 @@ body {
   outline-offset: 2px;
 }
 
+/* Text fields show focus on their own border; the global outline drew a second box around them. */
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable='true']:focus-visible,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus-visible {
+  outline: none;
+}
+
 .message-body a { color: #289ED8; text-decoration: underline; }
 .message-body a:hover { color: #2B3990; }
 

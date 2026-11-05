@@ -255,7 +255,7 @@ export function taskDetailsFromProjectTask(task: ProjectTask, options: ProjectTa
     description: task.description ?? '',
     status: options.status ?? inferStatus(options.columnName),
     priority: task.priority,
-    assigneeIds: task.assignee_id ? [task.assignee_id] : [],
+    assigneeIds: task.assignee_ids?.length ? Array.from(new Set(task.assignee_ids)) : task.assignee_id ? [task.assignee_id] : [],
     labelIds: [],
     estimate: typeof task.estimated_hours === 'number' && task.estimated_hours >= 0
       ? { value: task.estimated_hours, unit: 'hours' }

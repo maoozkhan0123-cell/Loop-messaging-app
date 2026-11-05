@@ -8,20 +8,35 @@ import { useUnifiedInbox, type InboxItem } from '@/hooks/useProductivity'
 import { cn } from '@/lib/utils'
 import { InboxTaskDetail } from '@/components/InboxTaskDetail'
 
-// Read and cleared state is kept per browser, keyed by user.
-function useStoredIds(key: string | null) {
-  const [ids, setIds] = useState<Set<string>>(new Set())
+// When each task was last read / cleared, kept per browser and keyed by user.
+// A task is unread (or comes back from Cleared) when someone changes it after that time.
+function useStoredTimes(key: string | null, legacyKey: string | null) {
+  const [times, setTimes] = useState<Record<string, string>>({})
   useEffect(() => {
     if (!key) return
-    try { setIds(new Set(JSON.parse(localStorage.getItem(key) ?? '[]') as string[])) } catch { setIds(new Set()) }
-  }, [key])
-  const update = (fn: (next: Set<string>) => void) => setIds((current) => {
-    const next = new Set(current)
-    fn(next)
-    try { if (key) localStorage.setItem(key, JSON.stringify([...next])) } catch {}
+    try {
+      const stored = JSON.parse(localStorage.getItem(key) ?? 'null') as Record<string, string> | null
+      if (stored) { setTimes(stored); return }
+      // Older versions stored only ids; treat those as read/cleared now.
+      const legacy = legacyKey ? JSON.parse(localStorage.getItem(legacyKey) ?? '[]') as string[] : []
+      const now = new Date().toISOString()
+      setTimes(Object.fromEntries(legacy.map((id) => [id, now])))
+    } catch { setTimes({}) }
+  }, [key, legacyKey])
+  const set = (id: string, value: string | null) => setTimes((current) => {
+    const next = { ...current }
+    if (value) next[id] = value; else delete next[id]
+    try { if (key) localStorage.setItem(key, JSON.stringify(next)) } catch {}
     return next
   })
-  return [ids, update] as const
+  return [times, set] as const
+}
+
+const after = (time: string | undefined, than: string) => !!time && Date.parse(time) >= Date.parse(than)
+const ACTIVITY_TEXT: Record<InboxItem['activity'], string> = {
+  assigned: 'assigned this task to you',
+  updated: 'updated this task',
+  commented: 'commented on this task',
 }
 
 type Tab = 'all' | 'pending' | 'cleared'
@@ -32,27 +47,29 @@ export default function InboxPage() {
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState<Tab>('all')
   const [openItem, setOpenItem] = useState<InboxItem | null>(null)
-  const [readIds, updateRead] = useStoredIds(profile ? `inbox:${profile.id}:read` : null)
-  const [clearedIds, updateCleared] = useStoredIds(profile ? `inbox:${profile.id}:cleared` : null)
+  const [readAt, setReadAt] = useStoredTimes(profile ? `inbox:${profile.id}:read-at` : null, profile ? `inbox:${profile.id}:read` : null)
+  const [clearedAt, setClearedAt] = useStoredTimes(profile ? `inbox:${profile.id}:cleared-at` : null, profile ? `inbox:${profile.id}:cleared` : null)
+  const isUnread = (item: InboxItem) => !after(readAt[item.id], item.activityAt)
+  const isCleared = (item: InboxItem) => after(clearedAt[item.id], item.activityAt)
 
   // All = everything not cleared; Pending = not cleared and not done; Cleared = dismissed by the user.
-  const inTab = (item: InboxItem, value: Tab) => value === 'cleared' ? clearedIds.has(item.id) : !clearedIds.has(item.id) && (value === 'all' || !item.done)
-  const visible = useMemo(() => data.filter((item) =>
-    (tab === 'cleared' ? clearedIds.has(item.id) : !clearedIds.has(item.id) && (tab === 'all' || !item.done)) &&
-    (!query || `${item.task.title} ${item.assigner?.display_name ?? ''}`.toLowerCase().includes(query.toLowerCase()))
-  ), [data, clearedIds, tab, query])
+  const inTab = (item: InboxItem, value: Tab) => value === 'cleared' ? isCleared(item) : !isCleared(item) && (value === 'all' || !item.done)
+  const visible = data.filter((item) =>
+    inTab(item, tab) &&
+    (!query || `${item.task.title} ${item.actor?.display_name ?? ''} ${item.assigner?.display_name ?? ''}`.toLowerCase().includes(query.toLowerCase()))
+  )
 
   const groups = useMemo(() => {
     const byMonth = new Map<string, InboxItem[]>()
     for (const item of visible) {
-      const date = new Date(item.createdAt)
+      const date = new Date(item.activityAt)
       const label = format(date, isThisYear(date) ? 'MMMM' : 'MMMM yyyy')
       byMonth.set(label, [...(byMonth.get(label) ?? []), item])
     }
     return [...byMonth.entries()]
   }, [visible])
 
-  const unreadCount = data.filter((item) => !readIds.has(item.id) && !clearedIds.has(item.id)).length
+  const unreadCount = data.filter((item) => isUnread(item) && !isCleared(item)).length
   const tabs = [
     { value: 'all' as const, label: 'All', icon: LayoutGrid, hint: unreadCount ? `${unreadCount} unread` : null },
     { value: 'pending' as const, label: 'Pending', icon: Clock3, hint: `${data.filter((item) => inTab(item, 'pending')).length} open` },
@@ -60,11 +77,12 @@ export default function InboxPage() {
   ]
 
   const open = (item: InboxItem) => {
-    updateRead((ids) => ids.add(item.id))
+    setReadAt(item.id, new Date().toISOString())
     setOpenItem(item)
   }
 
-  if (openItem) return <InboxTaskDetail task={openItem.task} onClose={() => setOpenItem(null)} />
+  // Re-mark as read on close so the user's own edits in the task don't show as new.
+  if (openItem) return <InboxTaskDetail task={openItem.task} onClose={() => { setReadAt(openItem.id, new Date().toISOString()); setOpenItem(null) }} />
 
   return <main className="flex h-full min-w-0 flex-1 flex-col bg-[var(--content-bg)] text-[var(--text-primary)]">
     <header className="border-b border-[var(--ui-border)] bg-[var(--surface)]">
@@ -89,8 +107,8 @@ export default function InboxPage() {
           <h2 className="mb-2 px-1 text-sm font-semibold text-[var(--text-secondary)]">{month}</h2>
           <div className="overflow-hidden rounded-xl border border-[var(--ui-border)] bg-[var(--surface)]">
             {items.map((item) => {
-              const unread = !readIds.has(item.id)
-              const cleared = clearedIds.has(item.id)
+              const unread = isUnread(item)
+              const cleared = isCleared(item)
               return <div key={item.id} role="button" tabIndex={0} onClick={() => open(item)} onKeyDown={(event) => { if (event.key === 'Enter') open(item) }} className="group flex h-11 cursor-pointer items-center gap-3 border-b border-[var(--ui-border)] px-4 last:border-b-0 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none">
                 {item.done
                   ? <CircleCheck size={16} className="flex-shrink-0 fill-emerald-500 text-white"/>
@@ -98,15 +116,15 @@ export default function InboxPage() {
                 <span className={cn('min-w-0 flex-1 truncate text-sm md:max-w-[40%] md:flex-none md:basis-[40%]', unread ? 'font-semibold' : 'text-[var(--text-secondary)]')}>{item.task.title}</span>
                 <span className="hidden min-w-0 flex-1 items-center gap-2 truncate text-sm md:flex">
                   <User size={14} className="flex-shrink-0 text-[var(--text-muted)]"/>
-                  <span className="truncate"><span className={unread ? 'font-semibold' : 'text-[var(--text-secondary)]'}>{item.assigner?.display_name ?? 'Someone'}</span> <span className="text-[var(--primary)]">assigned this task to you</span></span>
+                  <span className="truncate"><span className={unread ? 'font-semibold' : 'text-[var(--text-secondary)]'}>{(item.activity === 'assigned' ? item.assigner : item.actor)?.display_name ?? 'Someone'}</span> <span className="text-[var(--primary)]">{ACTIVITY_TEXT[item.activity]}</span></span>
                 </span>
                 <span className="ml-auto flex flex-shrink-0 items-center gap-3">
                   <span className="hidden items-center gap-1 group-hover:flex">
-                    <button type="button" title={unread ? 'Mark as read' : 'Mark as unread'} aria-label={unread ? 'Mark as read' : 'Mark as unread'} onClick={(event) => { event.stopPropagation(); updateRead((ids) => { if (unread) ids.add(item.id); else ids.delete(item.id) }) }} className="grid h-7 w-7 place-items-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]">{unread ? <MailOpen size={15}/> : <Mail size={15}/>}</button>
-                    <button type="button" onClick={(event) => { event.stopPropagation(); updateCleared((ids) => { if (cleared) ids.delete(item.id); else ids.add(item.id) }); updateRead((ids) => ids.add(item.id)) }} className="flex h-7 items-center gap-1 rounded-md border border-[var(--ui-border)] bg-[var(--surface)] px-2.5 text-xs font-semibold shadow-sm hover:border-[var(--primary)]">{cleared ? <><RotateCcw size={13}/>Restore</> : <><Check size={13}/>Clear</>}</button>
+                    <button type="button" title={unread ? 'Mark as read' : 'Mark as unread'} aria-label={unread ? 'Mark as read' : 'Mark as unread'} onClick={(event) => { event.stopPropagation(); setReadAt(item.id, unread ? new Date().toISOString() : null) }} className="grid h-7 w-7 place-items-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]">{unread ? <MailOpen size={15}/> : <Mail size={15}/>}</button>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); const now = new Date().toISOString(); setClearedAt(item.id, cleared ? null : now); setReadAt(item.id, now) }} className="flex h-7 items-center gap-1 rounded-md border border-[var(--ui-border)] bg-[var(--surface)] px-2.5 text-xs font-semibold shadow-sm hover:border-[var(--primary)]">{cleared ? <><RotateCcw size={13}/>Restore</> : <><Check size={13}/>Clear</>}</button>
                   </span>
                   {item.commentsCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full border border-[var(--ui-border)] px-1 text-[10px] text-[var(--text-secondary)] group-hover:hidden" title={`${item.commentsCount} comments`}>{item.commentsCount}</span>}
-                  <time className={cn('w-12 text-right text-xs group-hover:hidden', unread ? 'font-semibold' : 'text-[var(--text-muted)]')}>{format(new Date(item.createdAt), 'MMM d')}</time>
+                  <time className={cn('w-12 text-right text-xs group-hover:hidden', unread ? 'font-semibold' : 'text-[var(--text-muted)]')}>{format(new Date(item.activityAt), 'MMM d')}</time>
                 </span>
               </div>
             })}

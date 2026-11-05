@@ -12,6 +12,42 @@ import type {
   Profile
 } from '@/types/database'
 
+type Supabase = ReturnType<typeof createClient>
+
+/** True when migration 013 (project_task_assignees) has not been applied yet. */
+function missingAssigneeTable(error: { code?: string; message?: string } | null) {
+  return !!error && (error.code === '42P01' || error.code === 'PGRST205' || /project_task_assignees/.test(error.message ?? ''))
+}
+
+/** Every assignee per task, from project_task_assignees. Empty when the table is not there yet. */
+export async function loadTaskAssignees(supabase: Supabase, taskIds: string[]) {
+  const map: Record<string, string[]> = {}
+  if (!taskIds.length) return map
+  const { data, error } = await supabase.from('project_task_assignees').select('task_id,user_id').in('task_id', taskIds)
+  if (error) { if (!missingAssigneeTable(error)) console.warn('Could not load task assignees', error); return map }
+  for (const row of (data ?? []) as Array<{ task_id: string; user_id: string }>) (map[row.task_id] ??= []).push(row.user_id)
+  return map
+}
+
+/** Makes project_task_assignees match the given list. */
+async function saveTaskAssignees(supabase: Supabase, taskId: string, userIds: string[]) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: existing, error } = await supabase.from('project_task_assignees').select('user_id').eq('task_id', taskId)
+  if (error) { if (missingAssigneeTable(error)) return; throw error }
+  const current = new Set(((existing ?? []) as Array<{ user_id: string }>).map((row) => row.user_id))
+  const removed = [...current].filter((id) => !userIds.includes(id))
+  const added = userIds.filter((id) => !current.has(id))
+  if (removed.length) {
+    const { error: deleteError } = await supabase.from('project_task_assignees').delete().eq('task_id', taskId).in('user_id', removed)
+    if (deleteError) throw deleteError
+  }
+  if (added.length) {
+    const { error: insertError } = await supabase.from('project_task_assignees')
+      .upsert(added.map((userId) => ({ task_id: taskId, user_id: userId, assigned_by: user?.id ?? null })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
+    if (insertError) throw insertError
+  }
+}
+
 export function useProjects(selectedBoardId?: string) {
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -69,6 +105,7 @@ export function useProjects(selectedBoardId?: string) {
       if (!tasksData || tasksData.length === 0) return []
 
       const typedTasks = tasksData as ProjectTask[]
+      const assigneesByTask = await loadTaskAssignees(supabase, typedTasks.map((t) => t.id))
 
       // Fetch profiles for assignees
       const assigneeIds = Array.from(
@@ -104,6 +141,7 @@ export function useProjects(selectedBoardId?: string) {
       return typedTasks.map((t: ProjectTask) => ({
         ...t,
         assignee: t.assignee_id ? profilesMap[t.assignee_id] : undefined,
+        assignee_ids: assigneesByTask[t.id] ?? (t.assignee_id ? [t.assignee_id] : []),
         comments_count: commentsCountMap[t.id] || 0
       })) as ProjectTask[]
     }
@@ -384,6 +422,7 @@ export function useProjects(selectedBoardId?: string) {
       priority,
       columnId,
       assigneeId,
+      assigneeIds,
       dueDate,
       startDate,
       estimatedHours,
@@ -395,6 +434,8 @@ export function useProjects(selectedBoardId?: string) {
       priority?: TaskPriority
       columnId?: string
       assigneeId?: string | null
+      /** Full assignee list; the first one is also stored as assignee_id. */
+      assigneeIds?: string[]
       dueDate?: string | null
       startDate?: string | null
       estimatedHours?: number | null
@@ -405,11 +446,14 @@ export function useProjects(selectedBoardId?: string) {
       if (description !== undefined) updates.description = description
       if (priority !== undefined) updates.priority = priority
       if (columnId !== undefined) updates.column_id = columnId
-      if (assigneeId !== undefined) updates.assignee_id = assigneeId
+      if (assigneeIds !== undefined) updates.assignee_id = assigneeIds[0] ?? null
+      else if (assigneeId !== undefined) updates.assignee_id = assigneeId
       if (dueDate !== undefined) updates.due_date = dueDate
       if (startDate !== undefined) updates.start_date = startDate
       if (estimatedHours !== undefined) updates.estimated_hours = estimatedHours
       if (archivedAt !== undefined) updates.archived_at = archivedAt
+
+      if (assigneeIds !== undefined) await saveTaskAssignees(supabase, taskId, assigneeIds)
 
       const { data, error } = await supabase
         .from('project_tasks')
@@ -432,6 +476,7 @@ export function useProjects(selectedBoardId?: string) {
           ...(variables.priority!==undefined?{priority:variables.priority}:{}),
           ...(variables.columnId!==undefined?{column_id:variables.columnId}:{}),
           ...(variables.assigneeId!==undefined?{assignee_id:variables.assigneeId}:{}),
+          ...(variables.assigneeIds!==undefined?{assignee_id:variables.assigneeIds[0]??null,assignee_ids:variables.assigneeIds}:{}),
           ...(variables.dueDate!==undefined?{due_date:variables.dueDate}:{}),
           ...(variables.startDate!==undefined?{start_date:variables.startDate}:{}),
           ...(variables.estimatedHours!==undefined?{estimated_hours:variables.estimatedHours}:{}),

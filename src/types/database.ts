@@ -123,6 +123,10 @@ export type ProjectTask = {
   blocked_reason?: string | null
   archived_at?: string | null
   version?: number
+  updated_at?: string
+  updated_by?: string | null
+  /** Every assignee (project_task_assignees); assignee_id is the primary one. */
+  assignee_ids?: string[]
   assignee?: Profile
   creator?: Profile
   comments_count?: number

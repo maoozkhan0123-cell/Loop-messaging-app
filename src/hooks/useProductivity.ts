@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile, ProjectTask, ScheduledMessage, WorkspaceEvent } from '@/types/database'
 
+export type InboxActivity = 'assigned' | 'updated' | 'commented'
+
 export type InboxItem = {
   id: string
   task: ProjectTask
@@ -11,8 +13,14 @@ export type InboxItem = {
   done: boolean
   commentsCount: number
   createdAt: string
+  /** Latest change made by someone else; drives unread state and the row text. */
+  activity: InboxActivity
+  activityAt: string
+  actor: Profile | null
   href: string
 }
+
+const latest = (a: string, b: string) => (Date.parse(a) >= Date.parse(b) ? a : b)
 
 export function useUnifiedInbox(userId?: string) {
   const supabase = createClient()
@@ -22,31 +30,68 @@ export function useUnifiedInbox(userId?: string) {
     refetchInterval: 30_000,
     // The inbox only lists tasks assigned to the user; messages live in Messages.
     queryFn: async () => {
-      const { data, error } = await supabase.from('project_tasks').select('*').eq('assignee_id', userId!).order('created_at', { ascending: false }).limit(100)
-      if (error) throw error
-      const tasks = ((data ?? []) as ProjectTask[]).filter((task) => !task.archived_at)
+      // A task can have several assignees (project_task_assignees, migration 013); assignee_id is the primary one.
+      const [primary, extra] = await Promise.all([
+        supabase.from('project_tasks').select('*').eq('assignee_id', userId!).order('created_at', { ascending: false }).limit(200),
+        supabase.from('project_task_assignees').select('task_id').eq('user_id', userId!),
+      ])
+      if (primary.error) throw primary.error
+      const byId = new Map(((primary.data ?? []) as ProjectTask[]).map((task) => [task.id, task]))
+      const extraIds = ((extra.error ? [] : extra.data ?? []) as Array<{ task_id: string }>).map((row) => row.task_id).filter((id) => !byId.has(id))
+      if (extraIds.length) {
+        const { data, error } = await supabase.from('project_tasks').select('*').in('id', extraIds)
+        if (error) throw error
+        for (const task of (data ?? []) as ProjectTask[]) byId.set(task.id, task)
+      }
+      const tasks = [...byId.values()].filter((task) => !task.archived_at)
       if (!tasks.length) return [] as InboxItem[]
 
-      const creatorIds = [...new Set(tasks.map((task) => task.created_by).filter((id): id is string => !!id))]
-      const [profilesResult, columnsResult, commentsResult] = await Promise.all([
-        creatorIds.length ? supabase.from('profiles').select('*').in('id', creatorIds) : Promise.resolve({ data: [] }),
+      const [columnsResult, commentsResult] = await Promise.all([
         supabase.from('project_columns').select('id,name').in('board_id', [...new Set(tasks.map((task) => task.board_id))]),
-        supabase.from('project_task_comments').select('task_id').in('task_id', tasks.map((task) => task.id)),
+        supabase.from('project_task_comments').select('task_id,user_id,created_at').in('task_id', tasks.map((task) => task.id)),
       ])
-      const profiles = new Map(((profilesResult.data ?? []) as Profile[]).map((profile) => [profile.id, profile]))
-      const doneColumns = new Set(((columnsResult.data ?? []) as Array<{ id: string; name: string }>).filter((column) => /done|complete/i.test(column.name)).map((column) => column.id))
+      const comments = (commentsResult.data ?? []) as Array<{ task_id: string; user_id: string | null; created_at: string }>
       const commentCounts = new Map<string, number>()
-      for (const row of (commentsResult.data ?? []) as Array<{ task_id: string }>) commentCounts.set(row.task_id, (commentCounts.get(row.task_id) ?? 0) + 1)
+      const lastOtherComment = new Map<string, { at: string; by: string | null }>()
+      for (const row of comments) {
+        commentCounts.set(row.task_id, (commentCounts.get(row.task_id) ?? 0) + 1)
+        if (row.user_id === userId) continue
+        const previous = lastOtherComment.get(row.task_id)
+        if (!previous || Date.parse(row.created_at) > Date.parse(previous.at)) lastOtherComment.set(row.task_id, { at: row.created_at, by: row.user_id })
+      }
 
-      return tasks.map((task): InboxItem => ({
-        id: task.id,
-        task,
-        assigner: task.created_by ? profiles.get(task.created_by) ?? null : null,
-        done: doneColumns.has(task.column_id),
-        commentsCount: commentCounts.get(task.id) ?? 0,
-        createdAt: task.created_at,
-        href: `/projects?board=${task.board_id}&task=${task.id}`,
-      }))
+      const activityOf = (task: ProjectTask): { activity: InboxActivity; at: string; by: string | null } => {
+        let result: { activity: InboxActivity; at: string; by: string | null } = { activity: 'assigned', at: task.created_at, by: task.created_by }
+        // Changes the user made themselves never mark the task unread.
+        if (task.updated_at && task.updated_by && task.updated_by !== userId && Date.parse(task.updated_at) - Date.parse(task.created_at) > 5_000) {
+          result = { activity: 'updated', at: task.updated_at, by: task.updated_by }
+        }
+        const comment = lastOtherComment.get(task.id)
+        if (comment && latest(comment.at, result.at) === comment.at) result = { activity: 'commented', at: comment.at, by: comment.by }
+        return result
+      }
+      const activities = new Map(tasks.map((task) => [task.id, activityOf(task)]))
+
+      const profileIds = [...new Set([...tasks.map((task) => task.created_by), ...[...activities.values()].map((item) => item.by)].filter((id): id is string => !!id))]
+      const { data: profileRows } = profileIds.length ? await supabase.from('profiles').select('*').in('id', profileIds) : { data: [] }
+      const profiles = new Map(((profileRows ?? []) as Profile[]).map((profile) => [profile.id, profile]))
+      const doneColumns = new Set(((columnsResult.data ?? []) as Array<{ id: string; name: string }>).filter((column) => /done|complete/i.test(column.name)).map((column) => column.id))
+
+      return tasks.map((task): InboxItem => {
+        const activity = activities.get(task.id)!
+        return {
+          id: task.id,
+          task,
+          assigner: task.created_by ? profiles.get(task.created_by) ?? null : null,
+          done: doneColumns.has(task.column_id),
+          commentsCount: commentCounts.get(task.id) ?? 0,
+          createdAt: task.created_at,
+          activity: activity.activity,
+          activityAt: activity.at,
+          actor: activity.by ? profiles.get(activity.by) ?? null : null,
+          href: `/projects?board=${task.board_id}&task=${task.id}`,
+        }
+      }).sort((a, b) => Date.parse(b.activityAt) - Date.parse(a.activityAt))
     },
   })
 }

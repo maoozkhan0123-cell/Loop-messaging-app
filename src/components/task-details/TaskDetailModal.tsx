@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
+  AlertCircle,
   Bell,
   BellOff,
+  CircleCheck,
   Link2,
   Loader2,
   Maximize2,
@@ -66,6 +68,7 @@ type UpdateTaskParams = {
   priority?: ProjectPriority;
   columnId?: string;
   assigneeId?: string | null;
+  assigneeIds?: string[];
   dueDate?: string | null;
   startDate?: string | null;
   estimatedHours?: number | null;
@@ -167,6 +170,8 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     details.preferences.detailsPanel,
   );
   const [busy, setBusy] = useState<string | null>(null);
+  // Every edit saves immediately; this tells the user it happened.
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [commandOpen, setCommandOpen] = useState(false);
   const [titleEditSignal, setTitleEditSignal] = useState(0);
   const [titleDirty, setTitleDirty] = useState(false);
@@ -351,15 +356,19 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     remote: () => Promise<unknown>,
   ) => {
     setBusy(name);
+    setSaveState("saving");
     try {
       const outcome = local();
       if (!outcome.ok) {
         accept(outcome, label);
+        setSaveState("error");
         return false;
       }
       try {
         await remote();
+        setSaveState("saved");
       } catch (cause) {
+        setSaveState("error");
         let rolledBack = true;
         if (outcome.result.changed) {
           const expectedVersion = outcome.result.state.tasks[task.id]?.version;
@@ -479,7 +488,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
         selected
           ? details.unassignMember(memberId)
           : details.assignMember(memberId),
-      () => onUpdate({ taskId: task.id, assigneeId: nextIds[0] || null }),
+      () => onUpdate({ taskId: task.id, assigneeIds: nextIds }),
     );
   };
   const changeParent = (parentId?: string) => {
@@ -829,6 +838,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
               <div className="min-w-0 flex-1 truncate text-[11px] font-semibold sm:hidden">
                 {task.key}
               </div>
+              <SaveStatus state={saveState} />
               <div className="shrink-0">
                 <StatusMenu
                   variant="field"
@@ -1320,5 +1330,26 @@ function LoadingPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function SaveStatus({ state }: { state: "idle" | "saving" | "saved" | "error" }) {
+  if (state === "idle") return null;
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className={`hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold sm:inline-flex ${
+        state === "error"
+          ? "bg-red-50 text-red-600"
+          : state === "saving"
+            ? "text-[var(--muted-foreground)]"
+            : "bg-emerald-50 text-emerald-700"
+      }`}
+    >
+      {state === "saving" && <><Loader2 size={12} className="animate-spin" />Saving…</>}
+      {state === "saved" && <><CircleCheck size={12} />All changes saved</>}
+      {state === "error" && <><AlertCircle size={12} />Not saved</>}
+    </span>
   );
 }
