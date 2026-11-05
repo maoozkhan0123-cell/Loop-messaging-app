@@ -5,10 +5,10 @@ import { Providers } from '@/components/Providers'
 import { Toaster } from '@/components/ui/Toaster'
 
 export const metadata: Metadata = {
-  title: 'BySync — Team Communication & Work Management',
+  title: 'Bytechsol — Team Communication & Work Management',
   description: 'One workspace for team messaging, projects, files, tasks, and ideas',
-  applicationName: 'BySync',
-  icons: { icon: '/bysync-logo.svg' },
+  applicationName: 'Bytechsol',
+  icons: { icon: '/bytechsol-mark.png' },
 }
 
 export default function RootLayout({

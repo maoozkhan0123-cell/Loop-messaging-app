@@ -77,14 +77,14 @@ export default function SetPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] px-4 py-10">
       <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-xl shadow-slate-200/50">
-        <div className="flex justify-center mb-7"><Image src="/bysync.svg" alt="BySync" width={210} height={68} priority /></div>
+        <div className="flex justify-center mb-7"><Image src="/bytechsol-logo.png" alt="Bytechsol" width={186} height={48} priority /></div>
         {checking ? (
           <div className="flex flex-col items-center py-12 text-[#64748B]"><Loader2 className="animate-spin mb-3 text-[#3589FA]" /><p className="text-sm">Verifying your secure link…</p></div>
         ) : complete ? (
           <div className="text-center py-5">
             <CheckCircle2 size={52} className="mx-auto text-emerald-500 mb-4" />
             <h1 className="text-2xl font-bold text-[#0F172A]">Password created</h1>
-            <p className="text-sm text-[#64748B] mt-2 mb-6">Your BySync account is ready. Sign in with your work email and new password.</p>
+            <p className="text-sm text-[#64748B] mt-2 mb-6">Your Bytechsol account is ready. Sign in with your work email and new password.</p>
             <Link href="/login" className="flex h-11 items-center justify-center rounded-lg bg-[#3589FA] text-sm font-semibold text-white hover:bg-[#2778E6]">Continue to sign in</Link>
           </div>
         ) : (

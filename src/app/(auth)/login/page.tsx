@@ -162,7 +162,7 @@ export default function LoginPage() {
             Back
           </button>
 
-          <h1 className="mb-1 text-[26px] font-black text-[var(--foreground)]">Sign in to BySync</h1>
+          <h1 className="mb-1 text-[26px] font-black text-[var(--foreground)]">Sign in to Bytechsol</h1>
           <p className="mb-6 text-[14px] text-[var(--muted-foreground)]">
             Signing in as <strong className="text-[var(--foreground)]">{email}</strong>
           </p>
@@ -234,10 +234,10 @@ function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="auth-page flex min-h-screen flex-col items-center justify-center bg-[var(--app-bg)] px-4 py-8">
       <main className="auth-card w-full max-w-[430px] rounded-2xl border border-[var(--ui-border)] bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-md)] sm:p-8">
-        {/* BySync logo */}
+        {/* Bytechsol logo */}
         <div className="mb-8 flex justify-center">
           <span className="inline-flex rounded-xl bg-white px-3 py-1.5 shadow-sm">
-            <Image src="/bysync.svg" alt="BySync" width={200} height={64} priority />
+            <Image src="/bytechsol-logo.png" alt="Bytechsol" width={186} height={48} priority />
           </span>
         </div>
 

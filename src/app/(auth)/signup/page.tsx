@@ -99,14 +99,14 @@ export default function SignupPage() {
 
         {/* Logo */}
         <div className="flex justify-center mb-8">
-          <Image src="/bysync.svg" alt="BySync" width={220} height={71} priority />
+          <Image src="/bytechsol-logo.png" alt="Bytechsol" width={186} height={48} priority />
         </div>
 
         <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-xs">
           {step === 'details' ? (
             <>
               <h1 className="text-lg font-bold text-[#000000] mb-1">Create your account</h1>
-              <p className="text-sm text-[#6B7280] mb-6">Join your team on BySync</p>
+              <p className="text-sm text-[#6B7280] mb-6">Join your team on Bytechsol</p>
 
               <form onSubmit={handleSendOTP} className="space-y-4">
                 {error && (
