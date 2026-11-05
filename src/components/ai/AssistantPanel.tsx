@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { isToday, isYesterday, subDays, format } from 'date-fns'
-import { ArrowLeft, ArrowUp, CalendarDays, Check, FolderKanban, History, Loader2, MessageSquareText, RotateCcw, Sparkles, SquarePen, Trash2, User, X } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Maximize2, Minimize2, CalendarDays, Check, FolderKanban, History, Loader2, MessageSquareText, RotateCcw, Sparkles, SquarePen, Trash2, User, X } from 'lucide-react'
 import { formatMessage } from '@/lib/formatMessage'
 import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/hooks/useProfile'
@@ -25,6 +25,13 @@ export function openAssistant(detail: OpenAiDetail = {}) {
 type Proposal = TaskProposal & { state?: 'saving' | 'created' | 'cancelled' | 'failed'; createdTaskId?: string; error?: string }
 type Turn = { role: 'user' | 'assistant'; content: string; messageId?: string; proposals?: Proposal[] }
 type Conversation = { id: string; title: string; updated_at: string }
+
+// Panel width (desktop): drag the left edge, use the expand button, or double-click the edge to reset.
+const DEFAULT_WIDTH = 440
+const MIN_WIDTH = 360
+const WIDTH_KEY = 'bysync.ai.width'
+const maxWidth = () => (typeof window === 'undefined' ? 1200 : Math.max(MIN_WIDTH, Math.min(1200, window.innerWidth - 80)))
+const clampWidth = (value: number) => Math.round(Math.min(maxWidth(), Math.max(MIN_WIDTH, value)))
 
 type Language = 'auto' | 'english' | 'roman_urdu'
 const LANGUAGES: Array<[Language, string]> = [['auto', 'Auto'], ['english', 'English'], ['roman_urdu', 'Roman Urdu']]
@@ -69,6 +76,38 @@ export function AssistantPanel() {
   const [context, setContext] = useState<OpenAiDetail['context']>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [width, setWidth] = useState(DEFAULT_WIDTH)
+  const [resizing, setResizing] = useState(false)
+
+  useEffect(() => {
+    try { const saved = Number(localStorage.getItem(WIDTH_KEY)); if (saved) setWidth(clampWidth(saved)) } catch {}
+    const onResize = () => setWidth((current) => clampWidth(current))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const saveWidth = (value: number) => { const next = clampWidth(value); setWidth(next); try { localStorage.setItem(WIDTH_KEY, String(next)) } catch {} }
+  const expanded = width >= maxWidth() - 4
+
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    setResizing(true)
+    document.body.style.userSelect = 'none'
+    let latest = width
+    const move = (moveEvent: PointerEvent) => { latest = clampWidth(window.innerWidth - moveEvent.clientX); setWidth(latest) }
+    const stop = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', stop)
+      handle.removeEventListener('pointercancel', stop)
+      document.body.style.userSelect = ''
+      setResizing(false)
+      saveWidth(latest)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', stop)
+    handle.addEventListener('pointercancel', stop)
+  }
   const lastChatKey = me ? `bysync.ai.last-chat.${me.id}` : null
   const { data: profiles = [] } = useAllProfiles()
   const [language, setLanguage] = useState<Language>('auto')
@@ -249,7 +288,18 @@ export function AssistantPanel() {
     {open && <>
       <motion.div key="ai-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)} className="fixed inset-0 z-[150] bg-black/20 sm:bg-transparent" />
       <motion.aside key="ai-panel" role="dialog" aria-label="Bytechsol AI" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[151] flex w-full flex-col bg-white shadow-2xl sm:w-[440px] sm:rounded-l-2xl sm:border-l sm:border-[#E5E7EB]">
+        style={{ '--ai-width': `${width}px` } as React.CSSProperties}
+        className="fixed inset-y-0 right-0 z-[151] flex w-full flex-col bg-white shadow-2xl sm:w-[var(--ai-width)] sm:rounded-l-2xl sm:border-l sm:border-[#E5E7EB]">
+        {/* Resize handle on the left edge (desktop). */}
+        <div role="separator" aria-orientation="vertical" aria-label="Resize assistant panel" aria-valuemin={MIN_WIDTH} aria-valuemax={maxWidth()} aria-valuenow={width} tabIndex={0}
+          title="Drag to resize · double-click to reset"
+          onPointerDown={startResize}
+          onDoubleClick={() => saveWidth(DEFAULT_WIDTH)}
+          onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); saveWidth(width + 40) } if (event.key === 'ArrowRight') { event.preventDefault(); saveWidth(width - 40) } }}
+          className="group absolute inset-y-0 -left-1 z-10 hidden w-3 cursor-col-resize sm:block focus-visible:outline-none">
+          <span className={cn('absolute inset-y-0 left-1 w-0.5 rounded-full transition-colors', resizing ? 'bg-[var(--primary)]' : 'bg-transparent group-hover:bg-[var(--primary)]/50 group-focus-visible:bg-[var(--primary)]')} />
+          <span className={cn('absolute left-0 top-1/2 h-10 w-2.5 -translate-y-1/2 rounded-full border border-[#E5E7EB] bg-white shadow-sm transition-opacity', resizing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')} />
+        </div>
         <header className="flex h-[60px] flex-shrink-0 items-center gap-2 border-b border-[#E5E7EB] px-3">
           {view === 'history'
             ? <button type="button" onClick={() => setView('chat')} aria-label="Back to chat" className="grid h-8 w-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F4F6]"><ArrowLeft size={17} /></button>
@@ -259,6 +309,7 @@ export function AssistantPanel() {
             <p className="truncate text-xs text-[#6B7280]">{view === 'history' ? 'Only you can see your chats' : context ? `Looking at this ${context.type}` : 'Answers from your workspace'}</p>
           </div>
           <button type="button" onClick={() => setView(view === 'history' ? 'chat' : 'history')} title="Chat history" aria-label="Chat history" aria-pressed={view === 'history'} className={cn('grid h-8 w-8 place-items-center rounded-lg hover:bg-[#F3F4F6]', view === 'history' ? 'bg-[var(--primary-soft)] text-[var(--primary)]' : 'text-[#6B7280]')}><History size={16} /></button>
+          <button type="button" onClick={() => saveWidth(expanded ? DEFAULT_WIDTH : maxWidth())} title={expanded ? 'Make smaller' : 'Make larger'} aria-label={expanded ? 'Make panel smaller' : 'Make panel larger'} className="hidden h-8 w-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F4F6] sm:grid">{expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
           <button type="button" onClick={newChat} title="New chat" aria-label="New chat" className="grid h-8 w-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F4F6]"><SquarePen size={16} /></button>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close assistant" className="grid h-8 w-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F4F6]"><X size={17} /></button>
         </header>
