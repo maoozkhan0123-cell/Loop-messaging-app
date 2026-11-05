@@ -108,8 +108,10 @@ export default function CalendarPage() {
           </div>
         </div>
         <MonthGrid month={month} items={items} onDay={openForm}/>
-        <div className="mt-3 flex flex-wrap gap-4 text-xs text-[var(--text-muted)]">
-          <Legend kind="company" label="Company-wide"/><Legend kind="invite" label="Meeting (invite only)"/><Legend kind="task" label="Your task due"/>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-[var(--text-muted)]">
+          <Legend kind="company" label="Company-wide" hint="holidays and events for everyone"/>
+          <Legend kind="invite" label="Meetings" hint="only you and the people invited"/>
+          <Legend kind="task" label="Your deadlines" hint="due dates of tasks assigned to you"/>
         </div>
       </div>
 
@@ -136,8 +138,13 @@ export default function CalendarPage() {
   </main>
 }
 
-function Legend({ kind, label }: { kind: CalendarItem['kind']; label: string }) {
-  return <span className="flex items-center gap-1.5"><span className={cn('h-2.5 w-2.5 rounded-sm', KIND_STYLE[kind])}/>{label}</span>
+const LEGEND_SWATCH: Record<CalendarItem['kind'], string> = { company: 'bg-amber-400', invite: 'bg-[var(--primary)]', task: 'bg-rose-500' }
+
+function Legend({ kind, label, hint }: { kind: CalendarItem['kind']; label: string; hint: string }) {
+  return <span className="flex items-center gap-1.5" title={hint}>
+    {kind === 'task' ? <Flag size={12} className="text-rose-600"/> : <span className={cn('h-2.5 w-2.5 rounded-sm', LEGEND_SWATCH[kind])}/>}
+    <span><span className="font-medium text-[var(--text-secondary)]">{label}</span> <span className="hidden sm:inline">· {hint}</span></span>
+  </span>
 }
 
 function EventCard({ item, meId, onRsvp, onDelete }: { item: WorkspaceEvent; meId?: string; onRsvp: (response: 'accepted' | 'declined' | 'maybe') => void; onDelete: () => void }) {

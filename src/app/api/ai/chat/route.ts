@@ -6,6 +6,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const MAX_TOOL_ROUNDS = 5
 const MAX_HISTORY = 12
+const URDU_SCRIPT = /[\u0600-\u06FF]/
+// Common Roman Urdu words. With "Auto", a message with none of them is treated as English.
+const ROMAN_URDU_WORDS = /\b(hai|hain|mujhe|mujhay|mera|meri|mere|kya|kia|kaun|kon|kab|kahan|kaise|kesay|kyun|batao|bataen|bataiye|karo|karna|karein|kar|ne|ko|ka|ki|ke|aur|nahi|nahin|abhi|aaj|kal|sab|kuch|wala|wali|diya|kiya|hua|raha|rahi|chahiye|dekho|bhai|yaar|haan|jee|ji)\b/i
 
 type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
@@ -34,11 +37,25 @@ async function saveTurn(supabase: SupabaseClient, conversationId: string | undef
   return { conversationId: id, messageId: (rows as Array<{ id: string; role: string }>).find((row) => row.role === 'assistant')?.id }
 }
 
-function systemPrompt(name: string, today: string, timeZone: string, context?: { type: string; id: string }) {
+type AiLanguage = 'auto' | 'english' | 'roman_urdu'
+
+// Roman Urdu = Urdu written only in Latin letters. Models tend to drift into Urdu script, so it is forbidden explicitly.
+const ROMAN_URDU = 'natural, friendly Roman Urdu: Urdu written ONLY in English (Latin) letters, e.g. "Aap ke 3 tasks pending hain, sab se pehle contact form wala bug fix karein." Never write a single word in Urdu/Arabic script. Keep task titles, names and dates exactly as they are.'
+
+const LANGUAGE_RULE: Record<AiLanguage, string> = {
+  auto: `Match the language of the user's latest message. If it is in English, reply in English. If it is in Roman Urdu or mixed Urdu-English (e.g. "mujhe batao", "kya scene hai"), reply in ${ROMAN_URDU}`,
+  english: 'Always reply in clear, simple English.',
+  roman_urdu: `Always reply in ${ROMAN_URDU} Do this even when the user writes in English.`,
+}
+
+function systemPrompt(name: string, today: string, timeZone: string, language: AiLanguage, context?: { type: string; id: string }) {
   return [
     `You are Bytechsol AI, the assistant inside the Bytechsol workspace (tasks, projects, channels, calendar, ideas board). You are helping ${name}.`,
+    LANGUAGE_RULE[language],
     `Today is ${today} (time zone ${timeZone}). Resolve dates like "Friday" or "next week" to YYYY-MM-DD.`,
-    'Use the tools to look up real data before answering questions about tasks, projects, messages, the calendar or ideas. Never invent tasks, people, dates or messages. If a tool finds nothing, say so.',
+    'Use the tools to look up real data before answering questions about tasks, projects, messages, the calendar or ideas. Never invent tasks, people, dates or messages.',
+    '"Assigned by" a person means the task was created by them. For any question about a teammate (what they assigned, are doing, said or commented), call find_person.',
+    'Be helpful when the exact answer is "none": do not stop at "nothing found". Look for related information and say what you did find, e.g. "Usman has not assigned you any task, but he is on Release regression testing with you and commented on 2 tasks: …". From find_person, always mention tasks marked "shared with the user" (work you do together; say it naturally), their comments and recent messages when relevant.',
     'You only see what this user is allowed to see. If something is not found, it may be private.',
     'Be concise and practical. Use short paragraphs, bullet lists and **bold** for key items. Never use tables. Mention task titles, not ids.',
     'When summarising, lead with the outcome, then decisions, open questions and next steps.',
@@ -56,7 +73,7 @@ export async function POST(request: Request) {
   const groq = getGroq()
   if (!groq) return NextResponse.json({ error: 'The AI assistant is not set up yet. Add GROQ_API_KEY to the server environment.' }, { status: 503 })
 
-  let body: { messages?: ChatTurn[]; context?: { type: string; id: string }; today?: string; timeZone?: string; conversationId?: string }
+  let body: { messages?: ChatTurn[]; context?: { type: string; id: string }; today?: string; timeZone?: string; conversationId?: string; language?: string }
   try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }) }
 
   const history = (Array.isArray(body.messages) ? body.messages : [])
@@ -70,10 +87,14 @@ export async function POST(request: Request) {
   try { new Intl.DateTimeFormat('en', { timeZone }) } catch { timeZone = 'UTC' }
   const conversationId = typeof body.conversationId === 'string' && /^[0-9a-f-]{36}$/i.test(body.conversationId) ? body.conversationId : undefined
   const context = body.context && ['task', 'channel'].includes(body.context.type) ? { type: body.context.type, id: String(body.context.id).slice(0, 64) } : undefined
+  const chosen: AiLanguage = (['english', 'roman_urdu'] as const).find((value) => value === body.language) ?? 'auto'
+  const lastQuestion = history[history.length - 1].content
+  // Auto: models drift into Roman Urdu for informal English, so decide from the user's own words.
+  const language: AiLanguage = chosen !== 'auto' ? chosen : ROMAN_URDU_WORDS.test(lastQuestion) || URDU_SCRIPT.test(lastQuestion) ? 'auto' : 'english'
   const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
 
   const messages: Groq.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt(profile?.display_name ?? 'a teammate', today, timeZone, context) },
+    { role: 'system', content: systemPrompt(profile?.display_name ?? 'a teammate', today, timeZone, language, context) },
     ...history,
   ]
   const proposals: TaskProposal[] = []
@@ -94,7 +115,17 @@ export async function POST(request: Request) {
       const message = completion.choices[0]?.message
       const calls = message?.tool_calls ?? []
       if (!calls.length) {
-        const reply = message?.content?.trim() || 'I could not come up with an answer. Try rephrasing.'
+        let reply = message?.content?.trim() || 'I could not come up with an answer. Try rephrasing.'
+        // Roman Urdu must stay in Latin letters: if Urdu script slipped in and the user did not write in it, rewrite once.
+        const question = history[history.length - 1].content
+        if (URDU_SCRIPT.test(reply) && !URDU_SCRIPT.test(question)) {
+          const fixed = await groq.chat.completions.create({
+            model: AI_MODEL, temperature: 0.2, max_completion_tokens: 1200, include_reasoning: false,
+            messages: [...messages, { role: 'assistant', content: reply }, { role: 'user', content: 'Rewrite your last answer with exactly the same content, using only English (Latin) letters: Roman Urdu where it was Urdu. No Urdu script at all.' }],
+          }).catch(() => null)
+          const text = fixed?.choices[0]?.message?.content?.trim()
+          if (text && !URDU_SCRIPT.test(text)) reply = text
+        }
         const saved = await saveTurn(supabase, conversationId, history[history.length - 1].content, reply, proposals)
         return NextResponse.json({ reply, proposals, ...saved })
       }

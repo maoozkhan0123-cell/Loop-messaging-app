@@ -37,6 +37,9 @@ export const AI_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   fn('get_task', 'Full details of one task: description, status, assignees, dates and recent comments.', {
     task_id: { type: 'string', description: 'Task id from another tool result.' },
   }, ['task_id']),
+  fn('find_person', 'Everything involving one teammate that the user can see: tasks they assigned (created), tasks they are assigned to, tasks they commented on, and their recent messages. Use it for any question about a person.', {
+    person: { type: 'string', description: 'Teammate name, e.g. "Usman".' },
+  }, ['person']),
   fn('list_projects', 'Projects the user can see, with how many of their tasks are open.'),
   fn('get_channel_messages', 'Recent messages from a channel or direct message the user is in.', {
     channel: { type: 'string', description: 'Channel name (e.g. "general"), a teammate name for a DM, or a channel id.' },
@@ -83,16 +86,17 @@ async function names(ctx: ToolContext, ids: (string | null | undefined)[]) {
 /** Adds project and status names and renders one line per task. */
 async function describeTasks(ctx: ToolContext, tasks: Task[]) {
   if (!tasks.length) return []
-  const [{ data: boards }, { data: columns }] = await Promise.all([
+  const [{ data: boards }, { data: columns }, creators] = await Promise.all([
     ctx.supabase.from('project_boards').select('id,name').in('id', [...new Set(tasks.map((task) => task.board_id))]),
     ctx.supabase.from('project_columns').select('id,name').in('id', [...new Set(tasks.map((task) => task.column_id))]),
+    names(ctx, tasks.map((task) => task.created_by)),
   ])
   const boardName = new Map(((boards ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]))
   const columnName = new Map(((columns ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]))
   return tasks.map((task) => ({
     task,
     status: columnName.get(task.column_id) ?? 'unknown',
-    line: `- [${task.id}] ${task.title} | project: ${boardName.get(task.board_id) ?? '?'} | status: ${columnName.get(task.column_id) ?? '?'} | priority: ${task.priority} | due: ${day(task.due_date)}`,
+    line: `- [${task.id}] ${task.title} | project: ${boardName.get(task.board_id) ?? '?'} | status: ${columnName.get(task.column_id) ?? '?'} | priority: ${task.priority} | due: ${day(task.due_date)} | assigned by: ${task.created_by === ctx.userId ? 'the user' : creators.get(task.created_by ?? '') ?? 'unknown'}`,
   }))
 }
 
@@ -145,6 +149,48 @@ const tools: Record<string, (ctx: ToolContext, args: Record<string, unknown>) =>
       `description: ${clip(task.description, 1200) || '(empty)'}`,
       commentRows.length ? `comments (oldest first):\n${commentRows.map((row) => `- ${day(row.created_at)} ${who.get(row.user_id ?? '') ?? 'someone'}: ${clip(row.comment, 300)}`).join('\n')}` : 'comments: none',
     ].join('\n')
+  },
+
+  async find_person(ctx, args) {
+    const wanted = String(args.person ?? '').replace(/^@/, '').replace(/[%_]/g, '').trim()
+    if (!wanted) return 'Say which teammate.'
+    const { data: people } = await ctx.supabase.from('profiles').select('id,display_name,job_title').ilike('display_name', `%${wanted}%`).limit(5)
+    const found = (people ?? []) as Array<{ id: string; display_name: string; job_title: string | null }>
+    if (!found.length) return `Nobody called "${wanted}" in the workspace.`
+    if (found.length > 1 && !found.some((person) => person.display_name.toLowerCase() === wanted.toLowerCase())) return `"${wanted}" matches: ${found.map((person) => person.display_name).join(', ')}. Ask which one.`
+    const person = found.find((item) => item.display_name.toLowerCase() === wanted.toLowerCase()) ?? found[0]
+
+    const [{ data: created }, { data: primary }, { data: extra }, { data: commented }] = await Promise.all([
+      ctx.supabase.from('project_tasks').select('*').eq('created_by', person.id).is('archived_at', null).limit(30),
+      ctx.supabase.from('project_tasks').select('*').eq('assignee_id', person.id).is('archived_at', null).limit(30),
+      ctx.supabase.from('project_task_assignees').select('task_id').eq('user_id', person.id),
+      ctx.supabase.from('project_task_comments').select('task_id,comment,created_at').eq('user_id', person.id).order('created_at', { ascending: false }).limit(20),
+    ])
+    const extraIds = ((extra ?? []) as Array<{ task_id: string }>).map((row) => row.task_id)
+    const commentRows = (commented ?? []) as Array<{ task_id: string; comment: string; created_at: string }>
+    const otherIds = [...new Set([...extraIds, ...commentRows.map((row) => row.task_id)])]
+    const { data: others } = otherIds.length ? await ctx.supabase.from('project_tasks').select('*').in('id', otherIds).is('archived_at', null) : { data: [] }
+    // Everything above is already limited by row-level security to tasks the user may see.
+    const all = new Map<string, Task>()
+    for (const task of [...(created ?? []), ...(primary ?? []), ...(others ?? [])] as Task[]) all.set(task.id, task)
+    const lines = new Map((await describeTasks(ctx, [...all.values()])).map((row) => [row.task.id, row.line]))
+    const assignedIds = new Set([...((primary ?? []) as Task[]).map((task) => task.id), ...extraIds])
+    const mine = new Set(await myTaskIds(ctx))
+    const section = (title: string, ids: string[]) =>
+      `${title}:\n${ids.length ? ids.map((id) => `${lines.get(id)}${mine.has(id) ? ' | shared with the user' : ''}`).join('\n') : '- none'}`
+    const createdIds = ((created ?? []) as Task[]).map((task) => task.id).filter((id) => lines.has(id))
+    const assignedTo = [...assignedIds].filter((id) => lines.has(id))
+    const commentedOn = [...new Set(commentRows.map((row) => row.task_id))].filter((id) => lines.has(id))
+
+    const { data: messages } = await ctx.supabase.from('messages').select('body,created_at,channel_id').eq('user_id', person.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(8)
+    return [
+      `${person.display_name}${person.job_title ? ` (${person.job_title})` : ''}. Only items the user is allowed to see are listed.`,
+      section(`Tasks ${person.display_name} assigned (created)`, createdIds),
+      section(`Tasks assigned to ${person.display_name}`, assignedTo),
+      section(`Tasks ${person.display_name} commented on`, commentedOn),
+      `Their latest comments:\n${commentRows.filter((row) => lines.has(row.task_id)).slice(0, 6).map((row) => `- ${day(row.created_at)} on "${all.get(row.task_id)?.title}": ${clip(row.comment, 200)}`).join('\n') || '- none visible'}`,
+      `Their recent messages in the user's channels:\n${((messages ?? []) as Array<{ body: string | null; created_at: string }>).map((row) => `- ${localTime(ctx, row.created_at)}: ${clip(row.body, 200) || '(attachment)'}`).join('\n') || '- none'}`,
+    ].join('\n\n')
   },
 
   async list_projects(ctx) {

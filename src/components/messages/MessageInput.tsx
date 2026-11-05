@@ -9,7 +9,9 @@ import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
 import { useTypingIndicator } from '@/hooks/useTypingIndicator'
 import { useProfile } from '@/hooks/useProfile'
 import { createClient } from '@/lib/supabase/client'
-import { useQueryClient, InfiniteData } from '@tanstack/react-query'
+import { useQuery, useQueryClient, InfiniteData } from '@tanstack/react-query'
+import { Avatar } from '@/components/ui/Avatar'
+import { useAllProfiles } from '@/hooks/useProfiles'
 import type { Message } from '@/types/database'
 import { cn, formatFileSize, isImageMime } from '@/lib/utils'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -83,6 +85,20 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
 
   const { sendTyping } = useTypingIndicator(channelId)
   const { data: profile } = useProfile()
+  const { data: allProfiles = [] } = useAllProfiles()
+  // People who can be @mentioned: the other members of this conversation.
+  const { data: memberIds = [] } = useQuery({
+    queryKey: ['channel-member-ids', channelId],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await createClient().from('channel_members').select('user_id').eq('channel_id', channelId)
+      return ((data ?? []) as Array<{ user_id: string }>).map((row) => row.user_id)
+    },
+  })
+  const [mention, setMention] = useState<{ query: string; node: Text; start: number; index: number } | null>(null)
+  const mentionMatches = mention
+    ? allProfiles.filter((person) => person.id !== profile?.id && memberIds.includes(person.id) && person.display_name.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 6)
+    : []
   const supabase = createClient()
   const queryClient = useQueryClient()
   const { preferences } = usePreferences()
@@ -319,6 +335,11 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.nativeEvent.isComposing) return
+    if (mention && mentionMatches.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const step = e.key === 'ArrowDown' ? 1 : -1; setMention({ ...mention, index: (mention.index + step + mentionMatches.length) % mentionMatches.length }); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionMatches[mention.index]?.display_name ?? mentionMatches[0].display_name); return }
+      if (e.key === 'Escape') { e.preventDefault(); setMention(null); return }
+    }
     if (e.key === 'Enter' && !e.shiftKey && preferences.enterToSend) { e.preventDefault(); void handleSend() }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !preferences.enterToSend) { e.preventDefault(); void handleSend() }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') { e.preventDefault(); format('strikeThrough') }
@@ -336,7 +357,32 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
 
   const handleInput = () => {
     syncFromEditor()
+    updateMention()
     if (profile) sendTyping(profile.display_name)
+  }
+
+  // ── @mentions ──────────────────────────────────────────────────────────────
+  // "@" plus letters right before the cursor opens the people list for this conversation.
+  const updateMention = () => {
+    const selection = document.getSelection()
+    const node = selection?.anchorNode
+    if (!selection?.isCollapsed || !node || node.nodeType !== Node.TEXT_NODE || !editorRef.current?.contains(node)) { setMention(null); return }
+    const before = (node.textContent ?? '').slice(0, selection.anchorOffset)
+    const match = before.match(/(^|\s)@([A-Za-z.'-]*(?: [A-Za-z.'-]*)?)$/)
+    setMention(match ? { query: match[2], node: node as Text, start: selection.anchorOffset - match[2].length - 1, index: 0 } : null)
+  }
+
+  const pickMention = (name: string) => {
+    if (!mention) return
+    const selection = document.getSelection()
+    if (!selection) return
+    const range = document.createRange()
+    range.setStart(mention.node, mention.start)
+    range.setEnd(mention.node, selection.anchorNode === mention.node ? selection.anchorOffset : (mention.node.textContent ?? '').length)
+    selection.removeAllRanges(); selection.addRange(range)
+    document.execCommand('insertText', false, `@${name} `)
+    setMention(null)
+    syncFromEditor()
   }
 
   // ── Formatting ─────────────────────────────────────────────────────────────
@@ -509,7 +555,21 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
   const canSend = (!!body.trim() || pendingFiles.length > 0) && !isSending && !overLimit
 
   return (
-    <div className="px-3 sm:px-5 pb-3 sm:pb-5 flex-shrink-0">
+    <div className="relative px-3 sm:px-5 pb-3 sm:pb-5 flex-shrink-0">
+      {mention && mentionMatches.length > 0 && (
+        <div role="listbox" aria-label="Mention someone" className="absolute bottom-full left-3 right-3 z-[210] mb-1 max-w-sm overflow-hidden rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-xl sm:left-5">
+          <p className="px-3 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">People in this conversation</p>
+          {mentionMatches.map((person, index) => (
+            <button key={person.id} type="button" role="option" aria-selected={index === mention.index}
+              onMouseDown={(event) => { event.preventDefault(); pickMention(person.display_name) }}
+              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm', index === mention.index ? 'bg-[#EBF5FF]' : 'hover:bg-[#F3F4F6]')}>
+              <Avatar src={person.avatar_url} name={person.display_name} size={24} status={person.status} />
+              <span className="min-w-0 flex-1 truncate font-medium text-[#111827]">{person.display_name}</span>
+              <span className="truncate text-xs text-[#9CA3AF]">{person.job_title}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {error && <p className="text-xs text-red-500 mb-1 px-1 whitespace-pre-wrap">{error}</p>}
       {nearLimit && !error && (
         <p className={cn('text-xs mb-1 px-1 text-right', overLimit ? 'text-red-500' : 'text-[#9CA3AF]')}>
@@ -641,6 +701,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
             onPaste={handlePaste}
             onKeyUp={refreshActive}
             onMouseUp={refreshActive}
+            onBlur={() => setMention(null)}
             className="message-editor w-full overflow-y-auto px-4 py-2.5 text-[14px] leading-relaxed text-[#1D1C1D] focus:outline-none break-words"
             style={{ minHeight: 44, maxHeight: MAX_INPUT_HEIGHT }}
           />
@@ -679,7 +740,7 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
             </div>
 
             {/* @ mention */}
-            <SecBtn title="Mention someone" onClick={() => insertText('@')}>
+            <SecBtn title="Mention someone" onClick={() => { insertText('@'); updateMention() }}>
               <AtSign size={14} />
             </SecBtn>
 

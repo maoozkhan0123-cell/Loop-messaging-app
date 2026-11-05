@@ -9,6 +9,8 @@ import { ArrowLeft, ArrowUp, CalendarDays, Check, FolderKanban, History, Loader2
 import { formatMessage } from '@/lib/formatMessage'
 import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/hooks/useProfile'
+import { useAllProfiles } from '@/hooks/useProfiles'
+import { Avatar } from '@/components/ui/Avatar'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import type { TaskProposal } from '@/lib/ai/tools'
@@ -24,12 +26,24 @@ type Proposal = TaskProposal & { state?: 'saving' | 'created' | 'cancelled' | 'f
 type Turn = { role: 'user' | 'assistant'; content: string; messageId?: string; proposals?: Proposal[] }
 type Conversation = { id: string; title: string; updated_at: string }
 
-const SUGGESTIONS = [
-  { icon: FolderKanban, text: 'What should I work on today?' },
-  { icon: CalendarDays, text: 'What is due this week?' },
-  { icon: MessageSquareText, text: 'Catch me up on #general' },
-  { icon: SquarePen, text: 'Create a task for me to review the designs, due Friday' },
-]
+type Language = 'auto' | 'english' | 'roman_urdu'
+const LANGUAGES: Array<[Language, string]> = [['auto', 'Auto'], ['english', 'English'], ['roman_urdu', 'Roman Urdu']]
+const LANGUAGE_KEY = 'bysync.ai.language'
+
+const SUGGESTIONS: Record<'english' | 'roman_urdu', Array<{ icon: typeof FolderKanban; text: string }>> = {
+  english: [
+    { icon: FolderKanban, text: 'What should I work on today?' },
+    { icon: CalendarDays, text: 'What is due this week?' },
+    { icon: MessageSquareText, text: 'Catch me up on #general' },
+    { icon: SquarePen, text: 'Create a task for me to review the designs, due Friday' },
+  ],
+  roman_urdu: [
+    { icon: FolderKanban, text: 'Aaj mujhe kis task par kaam karna chahiye?' },
+    { icon: CalendarDays, text: 'Is hafte mere kaun se tasks due hain?' },
+    { icon: MessageSquareText, text: '#general mein kya baat hui? Short mein batao' },
+    { icon: SquarePen, text: 'Mere liye designs review karne ka task banao, Friday tak' },
+  ],
+}
 
 function groupLabel(iso: string) {
   const date = new Date(iso)
@@ -56,6 +70,31 @@ export function AssistantPanel() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastChatKey = me ? `bysync.ai.last-chat.${me.id}` : null
+  const { data: profiles = [] } = useAllProfiles()
+  const [language, setLanguage] = useState<Language>('auto')
+  const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(null)
+
+  useEffect(() => {
+    try { const saved = localStorage.getItem(LANGUAGE_KEY) as Language | null; if (saved && LANGUAGES.some(([value]) => value === saved)) setLanguage(saved) } catch {}
+  }, [])
+  const chooseLanguage = (value: Language) => { setLanguage(value); try { localStorage.setItem(LANGUAGE_KEY, value) } catch {} }
+
+  // @mentions: typing "@" lists teammates; picking one inserts "@Name" so the assistant knows who is meant.
+  const mentionMatches = mention
+    ? profiles.filter((person) => person.id !== me?.id && person.display_name.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 5)
+    : []
+  const updateMention = (value: string, caret: number) => {
+    const match = value.slice(0, caret).match(/(^|\s)@([A-Za-z.'-]*(?: [A-Za-z.'-]*)?)$/)
+    setMention(match ? { query: match[2], start: caret - match[2].length - 1, index: 0 } : null)
+  }
+  const pickMention = (name: string) => {
+    if (!mention) return
+    const el = inputRef.current
+    const caret = el?.selectionStart ?? input.length
+    const next = `${input.slice(0, mention.start)}@${name} ${input.slice(caret)}`
+    setInput(next); setMention(null)
+    window.requestAnimationFrame(() => { const position = mention.start + name.length + 2; el?.focus(); el?.setSelectionRange(position, position) })
+  }
 
   // Saved chats (migration 017). An empty list when history is not set up.
   const { data: conversations = [], isLoading: loadingHistory } = useQuery({
@@ -106,6 +145,7 @@ export function AssistantPanel() {
           messages: next.map(({ role, content }) => ({ role, content })),
           context: ctx,
           conversationId: chatId,
+          language,
           today: new Date().toLocaleDateString('en-CA'),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
@@ -124,7 +164,7 @@ export function AssistantPanel() {
     } finally {
       setBusy(false)
     }
-  }, [busy, lastChatKey, queryClient])
+  }, [busy, lastChatKey, queryClient, language])
 
   const newChat = useCallback(() => {
     setTurns([]); setConversationId(undefined); setTitle(undefined); setError(null); setContext(undefined); setView('chat')
@@ -238,9 +278,9 @@ export function AssistantPanel() {
         </div> : <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
           {loadingChat ? <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-[var(--primary)]" /></div>
             : !turns.length && !busy ? <div>
-              <h3 className="text-lg font-bold text-[#111827]">How can I help?</h3>
-              <p className="mt-1 text-sm text-[#6B7280]">Ask about your tasks, projects, messages, calendar or ideas. I only see what you can see.</p>
-              <div className="mt-5 space-y-2">{SUGGESTIONS.map(({ icon: Icon, text }) => <button key={text} type="button" onClick={() => void send(text, turns, context, conversationId)}
+              <h3 className="text-lg font-bold text-[#111827]">{language === 'roman_urdu' ? 'Main aap ki kya madad karun?' : 'How can I help?'}</h3>
+              <p className="mt-1 text-sm text-[#6B7280]">{language === 'roman_urdu' ? 'Apne tasks, projects, messages, calendar ya ideas ke baare mein poochein. Type @ to mention a teammate.' : 'Ask about your tasks, projects, messages, calendar or ideas. Type @ to mention a teammate.'}</p>
+              <div className="mt-5 space-y-2">{SUGGESTIONS[language === 'roman_urdu' ? 'roman_urdu' : 'english'].map(({ icon: Icon, text }) => <button key={text} type="button" onClick={() => void send(text, turns, context, conversationId)}
                 className="flex w-full items-center gap-3 rounded-xl border border-[#E5E7EB] px-3.5 py-3 text-left text-sm text-[#374151] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-soft)]">
                 <Icon size={16} className="flex-shrink-0 text-[var(--primary)]" />{text}
               </button>)}</div>
@@ -262,16 +302,37 @@ export function AssistantPanel() {
           </div>}
         </div>}
 
-        {view === 'chat' && <form onSubmit={(event) => { event.preventDefault(); void send(input, turns, context, conversationId) }} className="flex-shrink-0 border-t border-[#E5E7EB] p-3">
+        {view === 'chat' && <form onSubmit={(event) => { event.preventDefault(); void send(input, turns, context, conversationId) }} className="relative flex-shrink-0 border-t border-[#E5E7EB] p-3">
+          {mention && mentionMatches.length > 0 && <div role="listbox" aria-label="Mention a teammate" className="absolute bottom-full left-3 right-3 mb-1 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-xl">
+            {mentionMatches.map((person, index) => <button key={person.id} type="button" role="option" aria-selected={index === mention.index} onMouseDown={(event) => { event.preventDefault(); pickMention(person.display_name) }}
+              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm', index === mention.index ? 'bg-[var(--primary-soft)]' : 'hover:bg-[#F3F4F6]')}>
+              <Avatar src={person.avatar_url} name={person.display_name} size={24} status={person.status} />
+              <span className="min-w-0 flex-1 truncate font-medium text-[#111827]">{person.display_name}</span>
+              <span className="truncate text-xs text-[#9CA3AF]">{person.job_title}</span>
+            </button>)}
+          </div>}
           <div className="flex items-end gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-2 focus-within:border-[var(--primary)] focus-within:shadow-[0_0_0_3px_var(--focus-ring)]">
             <textarea ref={inputRef} value={input} rows={1} maxLength={4000} disabled={busy}
-              onChange={(event) => { setInput(event.target.value); event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 140)}px` }}
-              onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(input, turns, context, conversationId) } }}
+              onChange={(event) => { setInput(event.target.value); updateMention(event.target.value, event.target.selectionStart); event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 140)}px` }}
+              onKeyDown={(event) => {
+                if (mention && mentionMatches.length) {
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const step = event.key === 'ArrowDown' ? 1 : -1; setMention({ ...mention, index: (mention.index + step + mentionMatches.length) % mentionMatches.length }); return }
+                  if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); pickMention(mentionMatches[mention.index]?.display_name ?? mentionMatches[0].display_name); return }
+                  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMention(null); return }
+                }
+                if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(input, turns, context, conversationId) }
+              }}
               placeholder="Ask anything about your work…" aria-label="Message Bytechsol AI"
               className="max-h-[140px] min-h-[24px] flex-1 resize-none bg-transparent py-1 text-sm text-[#111827] placeholder-[#9CA3AF] outline-none" />
             <button type="submit" disabled={busy || !input.trim()} aria-label="Send" className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-[var(--primary)] text-white transition-opacity disabled:opacity-40"><ArrowUp size={16} /></button>
           </div>
-          <p className="mt-1.5 px-1 text-[11px] text-[#9CA3AF]">AI can make mistakes. Check important details.</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
+            <div role="radiogroup" aria-label="Reply language" className="flex items-center rounded-lg bg-[#F3F4F6] p-0.5">
+              {LANGUAGES.map(([value, label]) => <button key={value} type="button" role="radio" aria-checked={language === value} onClick={() => chooseLanguage(value)}
+                className={cn('rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors', language === value ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]')}>{label}</button>)}
+            </div>
+            <p className="text-[11px] text-[#9CA3AF]">AI can make mistakes. Check important details.</p>
+          </div>
         </form>}
       </motion.aside>
     </>}

@@ -13,6 +13,7 @@ import { useReactions } from '@/hooks/useReactions'
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { usePreferences } from '@/hooks/usePreferences'
+import { useProfile } from '@/hooks/useProfile'
 
 // 5 quick reactions shown in the hover toolbar (WhatsApp / Slack style)
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢']
@@ -40,6 +41,8 @@ export const Message = memo(function Message({
   const deleteMessage = useDeleteMessage()
   const { toggleReaction } = useReactions(channelId)
   const { preferences } = usePreferences()
+  const { data: me } = useProfile()
+  const myName = me?.display_name
 
   useEffect(() => {
     try {
@@ -188,7 +191,7 @@ export const Message = memo(function Message({
               </div>
             ) : (
               <div className="text-[14px] text-[#111827] leading-relaxed whitespace-pre-wrap break-words">
-                {message.body ? formatMessage(message.body) : null}
+                {message.body ? formatMessage(message.body, { me: myName }) : null}
                 {message.edited_at && <span className="text-[11px] text-[#9CA3AF] ml-1">(edited)</span>}
               </div>
             )}

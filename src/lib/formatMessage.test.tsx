@@ -22,6 +22,14 @@ describe('formatMessage', () => {
     expect(out).toContain('const a = 1</pre>')
   })
 
+  it('highlights @mentions, and mentions of the reader differently', () => {
+    const out = render(<div>{formatMessage('Hi @Ali Khan and @Sara, mail a@Bytechsol.com', { me: 'Sara' })}</div>).container.innerHTML
+    expect(out).toContain('text-[#1D6FD6]">@Ali Khan</span>')
+    expect(out).toContain('bg-amber-100')
+    expect(out).toContain('>@Sara</span>')
+    expect(out).not.toContain('>@Bytechsol.com</span>')
+  })
+
   it('does not turn unsafe links into hrefs', () => {
     expect(html('[x](javascript:alert(1))')).not.toContain('href="javascript')
   })
