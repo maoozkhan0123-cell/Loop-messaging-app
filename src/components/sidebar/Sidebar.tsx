@@ -30,6 +30,7 @@ export function Sidebar() {
   const [dmsOpen, setDmsOpen] = useState(true)
   const [showNewChannel, setShowNewChannel] = useState(false)
   const [newChannelName, setNewChannelName] = useState('')
+  const [newChannelPrivate, setNewChannelPrivate] = useState(true)
   const [startingDM, setStartingDM] = useState<string | null>(null)
   const [sidebarSearch, setSidebarSearch] = useState('')
 
@@ -87,7 +88,7 @@ export function Sidebar() {
 
   const handleCreateChannel = async () => {
     if (!newChannelName.trim()) return
-    const ch = await createChannel.mutateAsync({ name: newChannelName.trim() })
+    const ch = await createChannel.mutateAsync({ name: newChannelName.trim(), type: newChannelPrivate ? 'private' : 'public' })
     setNewChannelName(''); setShowNewChannel(false)
     router.push(`/channel/${ch.id}`)
   }
@@ -254,6 +255,25 @@ export function Sidebar() {
                     className="w-full h-9 px-3 text-[13px] rounded-lg text-white focus:outline-none"
                     style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #27AAE1' }}
                   />
+                  {/* Private: only you, then add people. Everyone: the whole workspace joins. */}
+                  <div className="mt-1.5 grid grid-cols-2 gap-1 rounded-lg p-0.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    {([[true, 'Private', Lock], [false, 'Everyone', Hash]] as const).map(([isPrivate, label, Icon]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => setNewChannelPrivate(isPrivate)}
+                        aria-pressed={newChannelPrivate === isPrivate}
+                        className={cn('flex h-7 items-center justify-center gap-1.5 rounded-md text-[12px] font-medium transition-colors', newChannelPrivate === isPrivate ? 'bg-white/15 text-white' : 'hover:bg-white/10')}
+                        style={newChannelPrivate === isPrivate ? undefined : { color: TEXT_MUTED }}
+                      >
+                        <Icon size={12} />{label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1 px-1 text-[11px] leading-4" style={{ color: TEXT_MUTED }}>
+                    {newChannelPrivate ? 'Only you at first. Add people from Members.' : 'Everyone in the workspace is added.'}
+                  </p>
                 </div>
               ) : (
                 <AddRow label="Add channel" onClick={() => setShowNewChannel(true)} />

@@ -11,6 +11,20 @@ export function roleDisplayName(role: unknown, profileName?: string | null, emai
   return profileName?.trim() || 'Team member'
 }
 
+/** Admins and the CEO; mirrors public.is_workspace_admin() in the database. */
+export function useIsWorkspaceAdmin() {
+  const supabase = createClient()
+  const { data: user } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: async () => {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error) throw error
+      return user
+    },
+  })
+  return ['admin', 'ceo'].includes(String(user?.app_metadata?.role ?? '')) || user?.email === 'loop@bytechsol.com'
+}
+
 export function useProfile() {
   const supabase = createClient()
 

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { useIdeas, useIdeaComments } from '@/hooks/useIdeas'
-import { useProfile } from '@/hooks/useProfile'
+import { useIsWorkspaceAdmin, useProfile } from '@/hooks/useProfile'
 import type { Idea, IdeaStatus } from '@/types/database'
 
 const STATUS_CONFIG: Record<
@@ -29,6 +29,7 @@ const STATUS_CONFIG: Record<
 export default function IdeasPage() {
   const { ideas, isLoading, createIdea, updateStatus, deleteIdea, addComment } = useIdeas()
   const { data: currentProfile } = useProfile()
+  const isAdmin = useIsWorkspaceAdmin()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -142,7 +143,8 @@ export default function IdeasPage() {
 
                       {/* Status Picker & Actions */}
                       <div className="flex items-center gap-2">
-                        <select
+                        {/* Only the author or an admin may change status (enforced by the database too). */}
+                        {(isAdmin || idea.author_id === currentProfile?.id) && <select
                           value={idea.status}
                           onChange={(e) =>
                             updateStatus({ ideaId: idea.id, status: e.target.value as IdeaStatus })
@@ -154,9 +156,9 @@ export default function IdeasPage() {
                           <option value="in_progress">Status: In Progress</option>
                           <option value="completed">Status: Completed</option>
                           <option value="archived">Status: Archived</option>
-                        </select>
+                        </select>}
 
-                        {currentProfile && idea.author_id === currentProfile.id && (
+                        {currentProfile && (idea.author_id === currentProfile.id || isAdmin) && (
                           <button
                             type="button"
                             onClick={() => {
