@@ -56,7 +56,8 @@ export async function GET() {
     ]
     return NextResponse.json({
       generatedAt: new Date().toISOString(), profiles, boards, columns, tasks,
-      events: eventsResult.error ? [] : eventsResult.data ?? [],
+      // Private meetings stay private, even from the CEO view (which reads with the service role).
+      events: eventsResult.error ? [] : (eventsResult.data ?? []).filter((event: { visibility?: string }) => (event.visibility ?? 'company') === 'company'),
       activity: auditResult.error ? [] : auditResult.data ?? [],
       milestones: milestonesResult.error ? [] : milestonesResult.data ?? [],
       risks,

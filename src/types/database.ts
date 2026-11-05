@@ -162,10 +162,13 @@ export type WorkspaceEvent = {
   location: string | null
   meeting_url: string | null
   recurrence: 'none' | 'daily' | 'weekly' | 'monthly'
+  /** company: everyone sees it (holidays); invite: only the organiser and invited people. */
+  visibility: 'company' | 'invite'
   created_by: string
   created_at: string
   creator?: Profile
   attendee_count?: number
+  attendee_ids?: string[]
   my_response?: 'pending' | 'accepted' | 'declined' | 'maybe'
 }
 
