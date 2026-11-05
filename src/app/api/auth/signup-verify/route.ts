@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { verifyOTP, deleteOTP } from '@/lib/otpStore'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { COMPANY_EMAIL_ERROR, isCompanyEmail } from '@/lib/auth/companyEmail'
 
 export async function POST(request: Request) {
   try {
@@ -9,6 +10,10 @@ export async function POST(request: Request) {
 
     if (!email || !code) {
       return NextResponse.json({ error: 'Email and OTP code are required' }, { status: 400 })
+    }
+
+    if (!isCompanyEmail(String(email))) {
+      return NextResponse.json({ error: COMPANY_EMAIL_ERROR }, { status: 403 })
     }
 
     const verification = verifyOTP(String(email), String(code))

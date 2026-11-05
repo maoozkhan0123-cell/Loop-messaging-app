@@ -49,7 +49,7 @@ export default function LoginPage() {
     setMagicLoading(true)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/` },
+      options: { emailRedirectTo: `${window.location.origin}/`, shouldCreateUser: false },
     })
     setMagicLoading(false)
     if (error) setError(error.message)

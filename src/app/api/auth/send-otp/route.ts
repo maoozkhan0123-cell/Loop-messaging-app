@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { setOTP } from '@/lib/otpStore'
 import { sendOTPEmail } from '@/lib/email'
 import { randomInt } from 'node:crypto'
+import { COMPANY_EMAIL_ERROR, isCompanyEmail } from '@/lib/auth/companyEmail'
 
 const requests = new Map<string, { count: number; resetAt: number }>()
 
@@ -14,6 +15,10 @@ export async function POST(request: Request) {
 
     if (!email || !password || !displayName) {
       return NextResponse.json({ error: 'Name, email, and password are required' }, { status: 400 })
+    }
+
+    if (!isCompanyEmail(email)) {
+      return NextResponse.json({ error: COMPANY_EMAIL_ERROR }, { status: 403 })
     }
 
     if (password.length < 8) {

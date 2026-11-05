@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendAccountLinkEmail } from '@/lib/email'
+import { COMPANY_EMAIL_ERROR, isCompanyEmail } from '@/lib/auth/companyEmail'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -54,6 +55,9 @@ export async function POST(request: Request) {
     }
     if (!EMAIL_RE.test(email)) {
       return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
+    }
+    if (!isCompanyEmail(email)) {
+      return NextResponse.json({ error: COMPANY_EMAIL_ERROR }, { status: 400 })
     }
     const admin = createAdminClient()
     const origin = new URL(request.url).origin

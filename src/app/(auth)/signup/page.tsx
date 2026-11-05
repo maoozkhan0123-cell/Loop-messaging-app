@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Loader2, Mail, Lock, User, KeyRound, ArrowLeft } from 'lucide-react'
+import { COMPANY_EMAIL_ERROR, isCompanyEmail } from '@/lib/auth/companyEmail'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -25,6 +26,7 @@ export default function SignupPage() {
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    if (!isCompanyEmail(email)) { setError(COMPANY_EMAIL_ERROR); return }
     setLoading(true)
 
     try {
