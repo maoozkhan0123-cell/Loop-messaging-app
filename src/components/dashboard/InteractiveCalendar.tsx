@@ -1,16 +1,19 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { addDays, addMonths, format, isSameDay, isSameMonth, startOfMonth, subMonths } from 'date-fns'
+import { addDays, addMonths, endOfDay, format, isSameDay, isSameMonth, startOfDay, startOfMonth, subMonths } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
-import { calendarDayKey, getMondayFirstCalendarGrid, parseCalendarDate } from '@/lib/calendar'
-import type { Profile, ProjectBoard, ProjectColumn, ProjectTask, TaskPriority } from '@/types/database'
+import { calendarDayKey, eventOccurrences, getMondayFirstCalendarGrid, parseCalendarDate } from '@/lib/calendar'
+import type { Profile, ProjectBoard, ProjectColumn, ProjectTask, TaskPriority, WorkspaceEvent } from '@/types/database'
 import type { CreateDashboardTaskInput } from '@/hooks/useDashboard'
 
 type InteractiveCalendarProps = {
   tasks: ProjectTask[]
+  /** Company-wide events and meetings the user is invited to (repeats are expanded). */
+  events?: WorkspaceEvent[]
+  meId?: string
   boards: ProjectBoard[]
   columns: ProjectColumn[]
   profiles: Profile[]
@@ -19,7 +22,7 @@ type InteractiveCalendarProps = {
   creating?: boolean
 }
 
-export function InteractiveCalendar({ tasks, boards, columns, profiles, onCreateTask, onOpenTask, creating }: InteractiveCalendarProps) {
+export function InteractiveCalendar({ tasks, events = [], meId, boards, columns, profiles, onCreateTask, onOpenTask, creating }: InteractiveCalendarProps) {
   const today = new Date()
   const [currentDate, setCurrentDate] = useState(startOfMonth(today))
   const [selectedDate, setSelectedDate] = useState(today)
@@ -38,6 +41,18 @@ export function InteractiveCalendar({ tasks, boards, columns, profiles, onCreate
     return map
   }, [tasks])
   const selectedTasks = tasksByDate.get(calendarDayKey(selectedDate)) ?? []
+  // Event occurrences for the visible grid, keyed by day.
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, Array<{ event: WorkspaceEvent; at: Date }>>()
+    if (!days.length) return map
+    const from = startOfDay(days[0]); const to = endOfDay(days[days.length - 1])
+    for (const event of events) for (const at of eventOccurrences(event, from, to)) {
+      const key = calendarDayKey(at)
+      map.set(key, [...(map.get(key) ?? []), { event, at }])
+    }
+    return map
+  }, [events, days])
+  const selectedEvents = (eventsByDate.get(calendarDayKey(selectedDate)) ?? []).sort((a, b) => a.at.getTime() - b.at.getTime())
 
   const navigateMonth = (offset: number) => {
     setDirection(offset)
@@ -52,7 +67,7 @@ export function InteractiveCalendar({ tasks, boards, columns, profiles, onCreate
   return (
     <section aria-label="Task calendar">
       <div className="flex items-center justify-between gap-3">
-        <div><h2 className="text-base font-semibold text-[var(--foreground)]">{format(currentDate, 'MMMM yyyy')}</h2><p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Task due dates</p></div>
+        <div><h2 className="text-base font-semibold text-[var(--foreground)]">{format(currentDate, 'MMMM yyyy')}</h2><p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Your deadlines and events</p></div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={goToday} className="mr-1 h-8 rounded-md border border-[var(--ui-border)] px-2.5 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]">Today</button>
           <button type="button" onClick={() => navigateMonth(-1)} aria-label="Previous month" className="grid h-8 w-8 place-items-center rounded-md border border-[var(--ui-border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]"><ChevronLeft size={15} /></button>
@@ -69,14 +84,15 @@ export function InteractiveCalendar({ tasks, boards, columns, profiles, onCreate
             {days.map((day) => {
               const key = calendarDayKey(day)
               const count = tasksByDate.get(key)?.length ?? 0
+              const eventCount = eventsByDate.get(key)?.length ?? 0
               const selected = isSameDay(day, selectedDate)
               const isToday = isSameDay(day, today)
-              return <button key={key} type="button" aria-pressed={selected} aria-label={`${format(day, 'EEEE, MMMM d, yyyy')}${count ? `, ${count} task${count === 1 ? '' : 's'} due` : ''}`} onClick={() => chooseDate(day)} onKeyDown={(event) => {
+              return <button key={key} type="button" aria-pressed={selected} aria-label={`${format(day, 'EEEE, MMMM d, yyyy')}${count ? `, ${count} task${count === 1 ? '' : 's'} due` : ''}${eventCount ? `, ${eventCount} event${eventCount === 1 ? '' : 's'}` : ''}`} onClick={() => chooseDate(day)} onKeyDown={(event) => {
                 const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowDown' ? 7 : event.key === 'ArrowUp' ? -7 : 0
                 if (!delta) return
                 event.preventDefault(); chooseDate(addDays(day, delta))
               }} className={`relative mx-auto grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${selected ? 'bg-[var(--primary)] text-white shadow-sm' : isSameMonth(day,currentDate) ? 'text-[var(--foreground)] hover:bg-[var(--primary-soft)]' : 'text-[var(--muted-foreground)] opacity-45 hover:opacity-80'} ${isToday && !selected ? 'ring-1 ring-[var(--primary)]' : ''}`}>
-                <span>{format(day, 'd')}</span>{count > 0 && <span className={`absolute bottom-1 h-1 w-1 rounded-full ${selected ? 'bg-white' : 'bg-[var(--primary)]'}`} />}<span className="sr-only">{selected ? 'Selected' : ''}{isToday ? ' Today' : ''}</span>
+                <span>{format(day, 'd')}</span>{(count > 0 || eventCount > 0) && <span className="absolute bottom-1 flex gap-0.5">{count > 0 && <span className={`h-1 w-1 rounded-full ${selected ? 'bg-white' : 'bg-[var(--primary)]'}`} />}{eventCount > 0 && <span className={`h-1 w-1 rounded-full ${selected ? 'bg-white/70' : 'bg-amber-500'}`} />}</span>}<span className="sr-only">{selected ? 'Selected' : ''}{isToday ? ' Today' : ''}</span>
               </button>
             })}
           </motion.div>
@@ -84,20 +100,21 @@ export function InteractiveCalendar({ tasks, boards, columns, profiles, onCreate
       </div>
 
       <div aria-live="polite" className="mt-4 rounded-xl border border-[var(--ui-border)] bg-[var(--surface-muted)] p-3">
-        <div className="flex items-start gap-2"><CalendarDays size={15} className="mt-0.5 shrink-0 text-[var(--primary)]" /><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-[var(--foreground)]">{selectedTasks.length ? `${selectedTasks.length} task${selectedTasks.length === 1 ? '' : 's'} due ${format(selectedDate, 'MMM d')}` : 'No tasks due on this date'}</p>
+        <div className="flex items-start gap-2"><CalendarDays size={15} className="mt-0.5 shrink-0 text-[var(--primary)]" /><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-[var(--foreground)]">{selectedTasks.length ? `${selectedTasks.length} task${selectedTasks.length === 1 ? '' : 's'} due ${format(selectedDate, 'MMM d')}` : selectedEvents.length ? format(selectedDate, 'EEEE, MMM d') : 'Nothing on this date'}</p>
+          {selectedEvents.length > 0 && <div className="mt-2 space-y-1">{selectedEvents.slice(0,4).map(({ event, at }) => <a key={`${event.id}-${at.toISOString()}`} href="/calendar" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-[var(--surface)]"><span className={`h-2 w-2 shrink-0 rounded-sm ${event.visibility === 'company' ? 'bg-amber-500' : 'bg-[var(--primary)]'}`} /><span className="shrink-0 text-[var(--muted-foreground)]">{format(at, 'p')}</span><span className="truncate">{event.title}</span></a>)}</div>}
           {selectedTasks.length > 0 && <div className="mt-2 max-h-28 space-y-1 overflow-y-auto">{selectedTasks.slice(0,4).map((task) => <button key={task.id} type="button" onClick={() => onOpenTask(task)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-[var(--surface)]"><span className={`h-2 w-2 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-slate-400'}`} /><span className="truncate">{task.title}</span></button>)}</div>}
         </div></div>
         <button type="button" onClick={() => setCreateOpen(true)} disabled={!boards.length || !columns.length} className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-[var(--primary)] text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><Plus size={13} />Add task for this day</button>
       </div>
 
-      <TaskDialog open={createOpen} onOpenChange={setCreateOpen} selectedDate={selectedDate} boards={boards} columns={columns} profiles={profiles} creating={creating} onCreate={onCreateTask} />
+      <TaskDialog open={createOpen} onOpenChange={setCreateOpen} selectedDate={selectedDate} boards={boards} columns={columns} profiles={profiles} meId={meId} creating={creating} onCreate={onCreateTask} />
     </section>
   )
 }
 
-function TaskDialog({ open, onOpenChange, selectedDate, boards, columns, profiles, creating, onCreate }: { open: boolean; onOpenChange: (open: boolean) => void; selectedDate: Date; boards: ProjectBoard[]; columns: ProjectColumn[]; profiles: Profile[]; creating?: boolean; onCreate: (input: CreateDashboardTaskInput) => Promise<unknown> }) {
+function TaskDialog({ open, onOpenChange, selectedDate, boards, columns, profiles, meId, creating, onCreate }: { open: boolean; onOpenChange: (open: boolean) => void; selectedDate: Date; boards: ProjectBoard[]; columns: ProjectColumn[]; profiles: Profile[]; meId?: string; creating?: boolean; onCreate: (input: CreateDashboardTaskInput) => Promise<unknown> }) {
   const [boardId, setBoardId] = useState(boards[0]?.id ?? '')
-  const [title, setTitle] = useState(''); const [description, setDescription] = useState(''); const [priority, setPriority] = useState<TaskPriority>('medium'); const [assigneeId, setAssigneeId] = useState(''); const [error, setError] = useState<string | null>(null)
+  const [title, setTitle] = useState(''); const [description, setDescription] = useState(''); const [priority, setPriority] = useState<TaskPriority>('medium'); const [assigneeId, setAssigneeId] = useState(meId ?? ''); const [error, setError] = useState<string | null>(null)
   const boardColumns = columns.filter((column) => column.board_id === boardId).sort((a,b) => a.position-b.position)
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError(null)
@@ -105,7 +122,7 @@ function TaskDialog({ open, onOpenChange, selectedDate, boards, columns, profile
     if (!title.trim() || !boardId || !columnId) { setError('Select a project and enter a task title.'); return }
     try { await onCreate({ boardId, columnId, title, description, priority, assigneeId: assigneeId || undefined, dueDate: calendarDayKey(selectedDate) }); setTitle(''); setDescription(''); onOpenChange(false) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Task could not be created.') }
   }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[120] bg-black/50" /><Dialog.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-[121] w-[min(480px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[var(--ui-border)] bg-[var(--surface)] p-5 shadow-2xl"><div className="flex items-start justify-between"><div><Dialog.Title className="text-lg font-semibold">New task</Dialog.Title><p className="mt-1 text-xs text-[var(--muted-foreground)]">Due {format(selectedDate, 'EEEE, MMMM d, yyyy')}</p></div><Dialog.Close aria-label="Close task form" className="rounded-md p-1.5 hover:bg-[var(--surface-muted)]"><X size={17} /></Dialog.Close></div><form onSubmit={(event) => void submit(event)} className="mt-5 space-y-3">{error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}<Field label="Title"><input required value={title} onChange={(e) => setTitle(e.target.value)} className="member-input" autoFocus /></Field><Field label="Description"><textarea value={description} onChange={(e) => setDescription(e.target.value)} className="member-input min-h-20 py-2" /></Field><div className="grid grid-cols-2 gap-3"><Field label="Project"><select value={boardId} onChange={(e) => setBoardId(e.target.value)} className="member-input">{boards.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}</select></Field><Field label="Priority"><select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)} className="member-input"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></Field></div><Field label="Assignee"><select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="member-input"><option value="">Unassigned</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.display_name}</option>)}</select></Field><div className="flex justify-end gap-2 pt-2"><Dialog.Close className="h-9 rounded-md border border-[var(--ui-border)] px-4 text-xs font-semibold">Cancel</Dialog.Close><button disabled={creating} className="h-9 rounded-md bg-[var(--primary)] px-4 text-xs font-semibold text-white disabled:opacity-60">{creating ? 'Creating…' : 'Create task'}</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[120] bg-black/50" /><Dialog.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-[121] w-[min(480px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[var(--ui-border)] bg-[var(--surface)] p-5 shadow-2xl"><div className="flex items-start justify-between"><div><Dialog.Title className="text-lg font-semibold">New task</Dialog.Title><p className="mt-1 text-xs text-[var(--muted-foreground)]">Due {format(selectedDate, 'EEEE, MMMM d, yyyy')}</p></div><Dialog.Close aria-label="Close task form" className="rounded-md p-1.5 hover:bg-[var(--surface-muted)]"><X size={17} /></Dialog.Close></div><form onSubmit={(event) => void submit(event)} className="mt-5 space-y-3">{error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}<Field label="Title"><input required value={title} onChange={(e) => setTitle(e.target.value)} className="member-input" autoFocus /></Field><Field label="Description"><textarea value={description} onChange={(e) => setDescription(e.target.value)} className="member-input min-h-20 py-2" /></Field><div className="grid grid-cols-2 gap-3"><Field label="Project"><select value={boardId} onChange={(e) => setBoardId(e.target.value)} className="member-input">{boards.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}</select></Field><Field label="Priority"><select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)} className="member-input"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></Field></div><Field label="Assignee"><select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="member-input"><option value="">Unassigned</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.id === meId ? `${profile.display_name} (me)` : profile.display_name}</option>)}</select></Field><div className="flex justify-end gap-2 pt-2"><Dialog.Close className="h-9 rounded-md border border-[var(--ui-border)] px-4 text-xs font-semibold">Cancel</Dialog.Close><button disabled={creating} className="h-9 rounded-md bg-[var(--primary)] px-4 text-xs font-semibold text-white disabled:opacity-60">{creating ? 'Creating…' : 'Create task'}</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block text-xs font-semibold text-[var(--foreground)]">{label}<div className="mt-1.5">{children}</div></label> }

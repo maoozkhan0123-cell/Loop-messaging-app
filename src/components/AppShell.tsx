@@ -1,5 +1,6 @@
 'use client'
 
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useState, useMemo, useEffect, createContext, useContext } from 'react'
 import { usePathname } from 'next/navigation'
 import { IconRail } from '@/components/sidebar/IconRail'
@@ -44,12 +45,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const setStatus = (status: 'online' | 'away' | 'offline') => {
       void supabase.from('profiles').update({ status }).eq('id', myProfile.id)
     }
-    const handleVisibility = () => setStatus(document.hidden ? 'away' : 'online')
-    const handlePageHide = () => setStatus('offline')
-    setStatus(document.hidden ? 'away' : 'online')
+    // A normal request is cancelled when the tab closes, which left people "online" forever.
+    // keepalive lets the offline update finish after the page is gone; it needs the token up front.
+    let accessToken: string | null = null
+    void supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => { accessToken = data.session?.access_token ?? null })
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => { accessToken = session?.access_token ?? null })
+    const sendOfflineOnExit = () => {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!url || !key || !accessToken) return
+      void fetch(`${url}/rest/v1/profiles?id=eq.${myProfile.id}`, {
+        method: 'PATCH',
+        keepalive: true,
+        headers: { apikey: key, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'offline' }),
+      }).catch(() => undefined)
+    }
+    const current = () => (document.hidden ? 'away' : 'online')
+    const handleVisibility = () => setStatus(current())
+    const handlePageHide = () => sendOfflineOnExit()
+    // Re-assert presence regularly so a status overwritten elsewhere (another tab closing) corrects itself.
+    const heartbeat = window.setInterval(() => setStatus(current()), 60_000)
+    setStatus(current())
     document.addEventListener('visibilitychange', handleVisibility)
     window.addEventListener('pagehide', handlePageHide)
     return () => {
+      window.clearInterval(heartbeat)
+      authListener.subscription.unsubscribe()
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('pagehide', handlePageHide)
       setStatus('offline')

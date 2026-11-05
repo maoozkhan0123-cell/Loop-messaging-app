@@ -3,13 +3,14 @@
 import { FormEvent, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Flag, Lock, MapPin, Plus, Search, Trash2, Users, Video, X } from 'lucide-react'
-import { addDays, addMonths, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday, startOfDay, startOfMonth, startOfWeek } from 'date-fns'
+import { addDays, addMonths, endOfDay, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday, startOfDay, startOfMonth, startOfWeek } from 'date-fns'
 import { useIsWorkspaceAdmin, useProfile } from '@/hooks/useProfile'
 import { useAllProfiles } from '@/hooks/useProfiles'
 import { useUnifiedInbox, useWorkspaceEvents } from '@/hooks/useProductivity'
 import { Avatar } from '@/components/ui/Avatar'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { eventOccurrences, nextOccurrence, parseCalendarDate } from '@/lib/calendar'
 import type { WorkspaceEvent } from '@/types/database'
 
 function localInput(date: Date) { return format(date, "yyyy-MM-dd'T'HH:mm") }
@@ -61,16 +62,30 @@ export default function CalendarPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create event') }
   }
 
-  // Events plus deadlines of open tasks assigned to the user.
-  const items = useMemo<CalendarItem[]>(() => [
-    ...events.map((item) => ({ id: item.id, title: item.title, at: new Date(item.starts_at), kind: item.visibility })),
-    ...inbox.filter((entry) => entry.task.due_date && !entry.done).map((entry) => ({ id: `task-${entry.id}`, title: entry.task.title, at: new Date(entry.task.due_date!), kind: 'task' as const, href: '/inbox' })),
-  ], [events, inbox])
+  // Event occurrences in the visible grid (repeats expanded) plus deadlines of open tasks assigned to the user.
+  const items = useMemo<CalendarItem[]>(() => {
+    const from = startOfDay(startOfWeek(startOfMonth(month))); const to = endOfDay(endOfWeek(endOfMonth(month)))
+    return [
+      ...events.flatMap((item) => eventOccurrences(item, from, to).map((at) => ({ id: `${item.id}-${at.toISOString()}`, title: item.title, at, kind: item.visibility }))),
+      ...inbox.flatMap((entry) => {
+        const due = entry.done ? null : parseCalendarDate(entry.task.due_date)
+        return due ? [{ id: `task-${entry.id}`, title: entry.task.title, at: due, kind: 'task' as const, href: '/inbox' }] : []
+      }),
+    ]
+  }, [events, inbox, month])
 
   const today = startOfDay(new Date())
-  const upcomingEvents = events.filter((item) => new Date(item.ends_at) >= today)
-  const upcomingDeadlines = inbox.filter((entry) => entry.task.due_date && !entry.done && new Date(entry.task.due_date) >= today)
-    .sort((a, b) => Date.parse(a.task.due_date!) - Date.parse(b.task.due_date!)).slice(0, 8)
+  // Each event once, at its next occurrence (repeating events roll forward).
+  const upcomingEvents = events.flatMap((item) => {
+    const next = nextOccurrence(item)
+    if (!next) return []
+    const length = Date.parse(item.ends_at) - Date.parse(item.starts_at)
+    return [{ ...item, starts_at: next.toISOString(), ends_at: new Date(next.getTime() + length).toISOString() }]
+  }).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+  const upcomingDeadlines = inbox.flatMap((entry) => {
+    const due = entry.done ? null : parseCalendarDate(entry.task.due_date)
+    return due && due >= today ? [{ entry, due }] : []
+  }).sort((a, b) => a.due.getTime() - b.due.getTime()).slice(0, 8)
 
   const remove = async (item: WorkspaceEvent) => {
     if (!(await confirmDialog({ title: `Delete “${item.title}”?`, description: 'It will be removed from everyone’s calendar.' }))) return
@@ -107,10 +122,10 @@ export default function CalendarPage() {
         {upcomingDeadlines.length > 0 && <div>
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Your deadlines</h2>
           <div className="overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--surface)]">
-            {upcomingDeadlines.map((entry) => <Link key={entry.id} href="/inbox" className="flex items-center gap-3 border-b border-[var(--ui-border)] px-4 py-3 last:border-b-0 hover:bg-[var(--surface-muted)]">
+            {upcomingDeadlines.map(({ entry, due }) => <Link key={entry.id} href="/inbox" className="flex items-center gap-3 border-b border-[var(--ui-border)] px-4 py-3 last:border-b-0 hover:bg-[var(--surface-muted)]">
               <Flag size={14} className="shrink-0 text-rose-600"/>
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{entry.task.title}</span>
-              <span className={cn('shrink-0 text-xs font-semibold', isToday(new Date(entry.task.due_date!)) ? 'text-rose-600' : 'text-[var(--text-muted)]')}>{isToday(new Date(entry.task.due_date!)) ? 'Today' : format(new Date(entry.task.due_date!), 'MMM d')}</span>
+              <span className={cn('shrink-0 text-xs font-semibold', isToday(due) ? 'text-rose-600' : 'text-[var(--text-muted)]')}>{isToday(due) ? 'Today' : format(due, 'MMM d')}</span>
             </Link>)}
           </div>
         </div>}
@@ -143,7 +158,7 @@ function EventCard({ item, meId, onRsvp, onDelete }: { item: WorkspaceEvent; meI
           {company ? <><Building2 size={11}/>Company-wide</> : <><Lock size={11}/>Private · {item.attendee_count ?? 1} {item.attendee_count === 1 ? 'person' : 'people'}</>}
         </span>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
-          <span className="flex items-center gap-1"><Clock size={12}/>{format(new Date(item.starts_at), 'p')}–{format(new Date(item.ends_at), 'p')}</span>
+          <span className="flex items-center gap-1"><Clock size={12}/>{format(new Date(item.starts_at), 'p')}–{format(new Date(item.ends_at), 'p')}{item.recurrence !== 'none' && ` · repeats ${item.recurrence}`}</span>
           {item.location && <span className="flex items-center gap-1"><MapPin size={12}/>{item.location}</span>}
           {item.meeting_url && <a className="flex items-center gap-1 text-[var(--primary)] hover:underline" href={item.meeting_url} target="_blank" rel="noreferrer"><Video size={12}/>Join meeting</a>}
         </div>

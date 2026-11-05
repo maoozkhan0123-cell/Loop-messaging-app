@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import type { Idea, Profile, ProjectBoard, ProjectColumn, ProjectTask, TaskPriority } from '@/types/database'
+import type { Profile, ProjectBoard, ProjectColumn, ProjectTask, TaskPriority } from '@/types/database'
 
 export type CreateDashboardTaskInput = {
   boardId: string
@@ -14,14 +14,6 @@ export type CreateDashboardTaskInput = {
   dueDate: string
 }
 
-export type DashboardMessage = {
-  id: string
-  body: string | null
-  created_at: string
-  channels: { name: string | null; type: string } | null
-  profiles: { display_name: string; avatar_url: string | null } | null
-}
-
 export function useDashboard() {
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -30,25 +22,34 @@ export function useDashboard() {
     queryKey: ['dashboard'],
     staleTime: 30_000,
     queryFn: async () => {
-      const [boards, columns, tasks, profiles, ideas, messages] = await Promise.all([
+      const { data: { session } } = await supabase.auth.getSession()
+      const userId = session?.user.id
+      // The database already limits every list to what this user may see.
+      const [boards, columns, tasks, profiles, assignments] = await Promise.all([
         supabase.from('project_boards').select('*').is('archived_at', null).order('created_at', { ascending: false }),
         supabase.from('project_columns').select('*').order('position'),
-        supabase.from('project_tasks').select('*').order('created_at', { ascending: false }),
+        supabase.from('project_tasks').select('*').is('archived_at', null).order('created_at', { ascending: false }),
         supabase.from('profiles').select('*').order('display_name'),
-        supabase.from('ideas').select('*').neq('status', 'archived').order('created_at', { ascending: false }).limit(5),
-        supabase.from('messages').select('id,body,created_at,channels(name,type),profiles!messages_user_id_fkey(display_name,avatar_url)').is('deleted_at', null).order('created_at', { ascending: false }).limit(8),
+        userId ? supabase.from('project_task_assignees').select('task_id').eq('user_id', userId) : Promise.resolve({ data: [], error: null }),
       ])
 
-      const failed = [boards, columns, tasks, profiles, ideas, messages].find((result) => result.error)
+      const failed = [boards, columns, tasks, profiles].find((result) => result.error)
       if (failed?.error) throw failed.error
 
+      const liveBoards = (boards.data ?? []) as ProjectBoard[]
+      const boardIds = new Set(liveBoards.map((board) => board.id))
+      const liveTasks = ((tasks.data ?? []) as ProjectTask[]).filter((task) => boardIds.has(task.board_id))
+      // Tasks assigned to me: primary assignee, or one of several (project_task_assignees).
+      const assignedIds = new Set(((assignments.error ? [] : assignments.data ?? []) as Array<{ task_id: string }>).map((row) => row.task_id))
+      const myTaskIds = new Set(liveTasks.filter((task) => task.assignee_id === userId || assignedIds.has(task.id)).map((task) => task.id))
+
       return {
-        boards: (boards.data ?? []) as ProjectBoard[],
+        userId,
+        boards: liveBoards,
         columns: (columns.data ?? []) as ProjectColumn[],
-        tasks: (tasks.data ?? []) as ProjectTask[],
+        tasks: liveTasks,
+        myTaskIds,
         profiles: (profiles.data ?? []) as Profile[],
-        ideas: (ideas.data ?? []) as Idea[],
-        messages: (messages.data ?? []) as unknown as DashboardMessage[],
       }
     },
   })
@@ -75,6 +76,7 @@ export function useDashboard() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['project_tasks', variables.boardId] })
+      queryClient.invalidateQueries({ queryKey: ['unified-inbox'] })
     },
   })
 
@@ -100,6 +102,7 @@ export function useDashboard() {
     onSuccess: (task) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['project_tasks', task.board_id] })
+      queryClient.invalidateQueries({ queryKey: ['unified-inbox'] })
     },
   })
 
