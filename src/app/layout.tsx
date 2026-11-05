@@ -3,6 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 import { Providers } from '@/components/Providers'
 import { Toaster } from '@/components/ui/Toaster'
+import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog'
 
 export const metadata: Metadata = {
   title: 'Bytechsol — Team Communication & Work Management',
@@ -21,6 +22,8 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <Providers>
           <Toaster>{children}</Toaster>
+          {/* In-app confirm dialogs for every page (replaces the browser's confirm popup). */}
+          <ConfirmDialogHost />
         </Providers>
         <Script src="https://cdn.lordicon.com/lordicon.js" strategy="lazyOnload" />
       </body>

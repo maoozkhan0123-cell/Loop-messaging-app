@@ -11,7 +11,6 @@ import { useProfile } from '@/hooks/useProfile'
 import { useChannels } from '@/hooks/useChannels'
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications'
 import { X } from 'lucide-react'
-import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog'
 import { AssistantPanel } from '@/components/ai/AssistantPanel'
 import { createClient } from '@/lib/supabase/client'
 
@@ -103,7 +102,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--app-bg)' }}>
         {/* ── Top toolbar: spans full width ── */}
         <Toolbar />
-        <ConfirmDialogHost />
         <AssistantPanel />
 
         {/* ── Body: sidebar (desktop/mobile) + content ── */}

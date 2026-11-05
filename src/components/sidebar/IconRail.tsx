@@ -10,6 +10,7 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useMobileNav } from '@/components/AppShell'
+import { useToast } from '@/components/ui/Toaster'
 import { PreferencesModal } from '@/components/PreferencesModal'
 
 interface IconRailProps {
@@ -30,6 +31,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
   const { closeMobileMenu } = useMobileNav()
   const { data: profile } = useProfile()
   const updateProfile = useUpdateProfile()
+  const { toast } = useToast()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -74,8 +76,8 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !profile) return
-    if (!file.type.startsWith('image/')) { alert('Please select an image file'); return }
-    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB'); return }
+    if (!file.type.startsWith('image/')) { toast({ title: 'Choose an image file', description: 'PNG, JPG or WebP work best.', type: 'error' }); return }
+    if (file.size > 5 * 1024 * 1024) { toast({ title: 'Image is too large', description: 'Choose an image under 5 MB.', type: 'error' }); return }
 
     setUploading(true)
     try {
@@ -93,7 +95,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
       const busted = `${publicUrl}?t=${Date.now()}`
       await updateProfile.mutateAsync({ avatar_url: busted })
     } catch {
-      alert('Upload failed. Make sure the "avatars" storage bucket exists in Supabase.')
+      toast({ title: 'Photo upload failed', description: 'Please try again in a moment.', type: 'error' })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''

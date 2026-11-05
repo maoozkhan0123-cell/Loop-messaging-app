@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useToast } from '@/components/ui/Toaster'
 import {
   getNotificationPref, setNotificationPref,
   requestNotificationPermission,
 } from '@/lib/notifications'
 
 export function useNotifications() {
+  const { toast } = useToast()
   const [enabled, setEnabled] = useState(false)
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default')
 
@@ -33,11 +35,11 @@ export function useNotifications() {
       setPermission('granted')
     } else if (result === 'denied') {
       setPermission('denied')
-      alert('Notifications are blocked by your browser.\nGo to browser settings → site permissions to allow them.')
+      toast({ title: 'Notifications are blocked', description: 'Allow notifications for this site in your browser settings, then try again.', type: 'error' })
     } else {
-      alert('Desktop notifications are not supported in this browser.')
+      toast({ title: 'Notifications are not supported', description: 'This browser cannot show desktop notifications.', type: 'error' })
     }
-  }, [enabled])
+  }, [enabled, toast])
 
   return { enabled, permission, toggle }
 }

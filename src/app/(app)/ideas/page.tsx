@@ -13,6 +13,7 @@ import {
 import { Avatar } from '@/components/ui/Avatar'
 import { useIdeas, useIdeaComments } from '@/hooks/useIdeas'
 import { useIsWorkspaceAdmin, useProfile } from '@/hooks/useProfile'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import type { Idea, IdeaStatus } from '@/types/database'
 
 const STATUS_CONFIG: Record<
@@ -162,7 +163,7 @@ export default function IdeasPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm('Delete this idea?')) deleteIdea(idea.id)
+                              void confirmDialog({ title: `Delete “${idea.title}”?`, description: 'The idea and its comments will be removed for everyone.' }).then((ok) => { if (ok) deleteIdea(idea.id) })
                             }}
                             className="text-[#94A3B8] hover:text-[#DC2626] p-1 rounded-lg"
                             title="Delete Idea"

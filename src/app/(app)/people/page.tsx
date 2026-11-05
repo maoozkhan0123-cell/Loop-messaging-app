@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { useRouter } from 'next/navigation'
 import { Check, Loader2, Mail, RotateCcw, Trash2, UserX, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -126,7 +127,7 @@ function ManageMemberModal({ profile, access, channels, onClose, onChanged }: { 
   const [error, setError] = useState<string | null>(null)
 
   const run = async (action: string, permanent = false) => {
-    if (permanent && !window.confirm(`Permanently remove ${profile.display_name}? This cannot be undone.`)) return
+    if (permanent && !(await confirmDialog({ title: `Permanently remove ${profile.display_name}?`, description: 'Their account is deleted and they lose access to the workspace. This cannot be undone.', confirmLabel: 'Remove permanently' }))) return
     setLoading(action); setError(null); setNotice(null)
     try {
       const response = await fetch(`/api/members/${profile.id}`, { method: permanent ? 'DELETE' : 'PATCH', headers: { 'Content-Type': 'application/json' }, body: permanent ? undefined : JSON.stringify({ action, displayName, jobTitle, role, channelIds }) })
