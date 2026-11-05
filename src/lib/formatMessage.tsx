@@ -46,6 +46,33 @@ function renderLines(text: string, key: string, options: FormatOptions = {}): Re
   while (i < lines.length) {
     const line = lines[i]
     const k = `${key}-${i}`
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/)
+    if (heading) {
+      const size = heading[1].length <= 2 ? 'text-[15px]' : 'text-[14px]'
+      out.push(<span key={k} role="heading" aria-level={heading[1].length} className={`mt-1 block font-bold text-[#111827] ${size}`}>{renderInline(heading[2], k, options)}</span>)
+      i++
+      continue
+    }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      out.push(<hr key={k} className="my-2 border-[#E5E7EB]" />)
+      i++
+      continue
+    }
+    // Markdown table: a "| a | b |" header, a "|---|---|" separator, then rows.
+    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1] ?? '')) {
+      const cells = (row: string) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
+      const header = cells(line)
+      const rows: string[][] = []
+      i += 2
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]))
+      out.push(<div key={k} className="my-1.5 overflow-x-auto whitespace-normal rounded-lg border border-[#E5E7EB]">
+        <table className="w-full border-collapse text-left text-[13px]">
+          <thead className="bg-[#F8FAFC]"><tr>{header.map((cell, n) => <th key={n} className="border-b border-[#E5E7EB] px-2.5 py-1.5 font-semibold text-[#374151]">{renderInline(cell, `${k}-h${n}`, options)}</th>)}</tr></thead>
+          <tbody>{rows.map((row, r) => <tr key={r} className="border-b border-[#F1F5F9] last:border-0">{header.map((_, n) => <td key={n} className="px-2.5 py-1.5 align-top">{renderInline(row[n] ?? '', `${k}-${r}-${n}`, options)}</td>)}</tr>)}</tbody>
+        </table>
+      </div>)
+      continue
+    }
     if (/^>\s?/.test(line)) {
       const quote: string[] = []
       while (i < lines.length && /^>\s?/.test(lines[i])) quote.push(lines[i++].replace(/^>\s?/, ''))

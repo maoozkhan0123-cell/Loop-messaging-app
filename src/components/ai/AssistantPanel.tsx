@@ -97,15 +97,17 @@ export function AssistantPanel() {
   }
 
   // Saved chats (migration 017). An empty list when history is not set up.
-  const { data: conversations = [], isLoading: loadingHistory } = useQuery({
+  const { data: historyResult, isLoading: loadingHistory } = useQuery({
     queryKey: ['ai-conversations', me?.id],
     enabled: open && !!me && view === 'history',
     queryFn: async () => {
       const { data, error: listError } = await supabase.from('ai_conversations').select('id,title,updated_at').order('updated_at', { ascending: false }).limit(100)
-      if (listError) return [] as Conversation[]
-      return (data ?? []) as Conversation[]
+      // PGRST205 / 42P01: the history tables (migration 017) are not in the database yet.
+      if (listError) return { conversations: [] as Conversation[], unavailable: ['PGRST205', '42P01'].includes(listError.code ?? '') ? 'setup' as const : 'error' as const }
+      return { conversations: (data ?? []) as Conversation[], unavailable: null }
     },
   })
+  const conversations = historyResult?.conversations ?? []
 
   const loadConversation = useCallback(async (id: string) => {
     setLoadingChat(true); setError(null); setView('chat')
@@ -274,6 +276,12 @@ export function AssistantPanel() {
                 <button type="button" onClick={() => void removeConversation(chat)} aria-label={`Delete chat ${chat.title}`} className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md text-[#9CA3AF] hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>
               </div>)}
             </div>)
+            : historyResult?.unavailable ? <div className="mx-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">{historyResult.unavailable === 'setup' ? 'Chat history is not switched on yet' : 'Chat history could not be loaded'}</p>
+              <p className="mt-1 text-xs leading-5">{historyResult.unavailable === 'setup'
+                ? 'An admin needs to run the database script supabase/migrations/017_ai_conversations.sql once in Supabase (SQL Editor → Run). Until then the assistant still answers, but chats are not saved.'
+                : 'Please try again in a moment.'}</p>
+            </div>
             : <div className="px-2 py-10 text-center"><History size={26} className="mx-auto text-[#D1D5DB]" /><p className="mt-3 text-sm font-semibold text-[#111827]">No saved chats yet</p><p className="mt-1 text-xs text-[#6B7280]">Your conversations with the assistant appear here.</p></div>}
         </div> : <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
           {loadingChat ? <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-[var(--primary)]" /></div>

@@ -30,6 +30,17 @@ describe('formatMessage', () => {
     expect(out).not.toContain('>@Bytechsol.com</span>')
   })
 
+  it('renders headings, dividers and tables instead of raw markdown symbols', () => {
+    const out = html('### 1. Dashboard\n---\n| Action | Where |\n|---|---|\n| **View** tasks | Home |\n| Open | Inbox |')
+    expect(out).toContain('role="heading"')
+    expect(out).toContain('>1. Dashboard</span>')
+    expect(out).toContain('<hr')
+    expect(out).toContain('<th')
+    expect(out).toContain('<strong class="font-bold">View</strong> tasks</td>')
+    expect(out).not.toContain('###')
+    expect(out).not.toContain('|---|')
+  })
+
   it('does not turn unsafe links into hrefs', () => {
     expect(html('[x](javascript:alert(1))')).not.toContain('href="javascript')
   })
