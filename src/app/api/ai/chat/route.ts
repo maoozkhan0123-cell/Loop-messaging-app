@@ -29,9 +29,12 @@ async function saveTurn(supabase: SupabaseClient, conversationId: string | undef
     if (error) { if (!missingTable(error)) console.error('Could not save AI chat:', error.message); return {} }
     id = data.id as string
   }
+  // Both rows must list the same columns: in a multi-row insert a missing column is sent as null.
+  // Explicit times keep the question before the answer (one statement would give both the same now()).
+  const now = Date.now()
   const { data: rows, error } = await supabase.from('ai_messages').insert([
-    { conversation_id: id, role: 'user', content: question.slice(0, 20000) },
-    { conversation_id: id, role: 'assistant', content: reply.slice(0, 20000), proposals },
+    { conversation_id: id, role: 'user', content: question.slice(0, 20000), proposals: [], created_at: new Date(now).toISOString() },
+    { conversation_id: id, role: 'assistant', content: reply.slice(0, 20000), proposals, created_at: new Date(now + 1).toISOString() },
   ]).select('id,role')
   if (error) { console.error('Could not save AI messages:', error.message); return { conversationId: id } }
   return { conversationId: id, messageId: (rows as Array<{ id: string; role: string }>).find((row) => row.role === 'assistant')?.id }
