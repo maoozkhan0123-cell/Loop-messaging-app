@@ -91,10 +91,12 @@ drop policy if exists "Authenticated users can delete project boards" on public.
 drop policy if exists "Project members can read boards" on public.project_boards;
 drop policy if exists "Project members can update boards" on public.project_boards;
 drop policy if exists "Board owners can delete boards" on public.project_boards;
+-- created_by is checked directly too: a board inserted in the same statement (insert ... returning)
+-- is not yet visible to the stable can_view_board() function.
 create policy "Project members can read boards" on public.project_boards for select to authenticated
-  using (public.can_view_board(id));
+  using (created_by = auth.uid() or public.can_view_board(id));
 create policy "Project members can update boards" on public.project_boards for update to authenticated
-  using (public.can_view_board(id)) with check (public.can_view_board(id));
+  using (created_by = auth.uid() or public.can_view_board(id)) with check (created_by = auth.uid() or public.can_view_board(id));
 create policy "Board owners can delete boards" on public.project_boards for delete to authenticated
   using (created_by = auth.uid() or public.is_workspace_admin());
 
