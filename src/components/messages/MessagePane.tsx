@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Hash, Lock, MessageSquare, Users, Info, Bell, Search, X, Paperclip,
-  Download, FileText, UserPlus,
+  Download, FileText, UserPlus, Sparkles,
 } from 'lucide-react'
+import { openAssistant } from '@/components/ai/AssistantPanel'
 import { MessageList } from './MessageList'
 import { MessageInput } from './MessageInput'
 import { ThreadPanel } from '@/components/thread/ThreadPanel'
@@ -116,6 +117,7 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
                 <TabButton label="Messages" isActive={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<MessageSquare size={13} />} />
                 <TabButton label="Files" isActive={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={<Paperclip size={13} />} />
               </div>
+              <HeaderIconBtn label="Summarise with AI" icon={<Sparkles size={16} />} onClick={() => openAssistant({ prompt: 'Catch me up on this conversation: main topics, decisions and anything that needs my reply.', context: { type: 'channel', id: channel.id } })} />
               <HeaderIconBtn label="Search in this conversation" icon={<Search size={16} />} onClick={handleSearchToggle} active={chatSearchOpen} />
               {isDM && <HeaderIconBtn label={notifications.enabled ? 'Notifications on' : 'Notifications off'} icon={<Bell size={16} />} className="hidden sm:flex" active={notifications.enabled} onClick={notifications.toggle} />}
               {!isDM && (

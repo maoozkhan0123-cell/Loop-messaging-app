@@ -12,6 +12,7 @@ import { useChannels } from '@/hooks/useChannels'
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications'
 import { X } from 'lucide-react'
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog'
+import { AssistantPanel } from '@/components/ai/AssistantPanel'
 import { createClient } from '@/lib/supabase/client'
 
 interface MobileNavContextType {
@@ -103,6 +104,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* ── Top toolbar: spans full width ── */}
         <Toolbar />
         <ConfirmDialogHost />
+        <AssistantPanel />
 
         {/* ── Body: sidebar (desktop/mobile) + content ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden relative md:pt-2" style={{ background: '#171936' }}>

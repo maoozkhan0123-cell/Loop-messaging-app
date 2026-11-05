@@ -8,6 +8,7 @@ import {
   BellOff,
   CircleCheck,
   Link2,
+  Sparkles,
   Loader2,
   Maximize2,
   Minimize2,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import { openAssistant } from "@/components/ai/AssistantPanel";
 import { useTaskDetails, type TaskActionOutcome } from "@/hooks/useTaskDetails";
 import {
   addAttachmentBlob,
@@ -851,6 +853,12 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                 />
               </div>
               <div className="flex shrink-0 items-center gap-0.5">
+                <IconButton
+                  label="Summarise with AI"
+                  onClick={() => openAssistant({ prompt: "Summarise this task: where it stands, key points from the comments, and the next steps.", context: { type: "task", id: task.id } })}
+                >
+                  <Sparkles size={15} />
+                </IconButton>
                 <span className="hidden min-[360px]:contents">
                   <IconButton
                     label="Copy task link"
