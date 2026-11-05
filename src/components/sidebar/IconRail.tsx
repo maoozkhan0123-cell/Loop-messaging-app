@@ -105,9 +105,20 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
       className={cn('flex flex-col flex-shrink-0 relative z-20', compact ? 'items-center' : 'items-stretch')}
       style={{ width: compact ? 70 : 176, background: RAIL_BG, height: '100%', paddingBottom: 12, '--rail-tab': joinsSidebar ? SIDEBAR_BG : 'var(--app-bg)' } as React.CSSProperties}
     >
+      {/* Workspace name */}
+      {!compact && (
+        <button
+          type="button"
+          onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }}
+          className="mx-3 mt-1 truncate rounded-lg px-2.5 py-1 text-left text-[24px] font-bold tracking-tight text-white transition-colors hover:bg-white/10"
+        >
+          Bytechsol
+        </button>
+      )}
+
       {/* Nav items */}
       <div
-        className={cn('min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] flex flex-col', compact ? 'items-center gap-px pt-3' : 'gap-1 pt-10 pb-4')}
+        className={cn('min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] flex flex-col', compact ? 'items-center gap-px pt-3' : 'gap-1 pt-6 pb-4')}
       >
         <RailBtn compact={compact} onDark={joinsSidebar} icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
         <RailBtn compact={compact} onDark={joinsSidebar} icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />

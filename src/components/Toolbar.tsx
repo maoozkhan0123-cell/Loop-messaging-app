@@ -169,10 +169,10 @@ export function Toolbar() {
         <Menu size={18} />
       </button>
 
-      {/* ── Workspace name ── */}
+      {/* ── Workspace name (desktop shows it in the left rail) ── */}
       <button
         type="button"
-        className="flex items-center gap-1 flex-shrink-0 hover:bg-white/10 rounded-lg px-1.5 sm:px-2 py-1 transition-colors"
+        className="md:hidden flex items-center gap-1 flex-shrink-0 hover:bg-white/10 rounded-lg px-1.5 sm:px-2 py-1 transition-colors"
         onClick={() => router.push('/dashboard')}
       >
         <span className="font-bold text-[16px] sm:text-[18px] text-white tracking-tight truncate max-w-[90px] sm:max-w-none">
