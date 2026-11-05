@@ -1,5 +1,6 @@
 import type Groq from 'groq-sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { nextOccurrence } from '../calendar'
 
 // Tools the assistant can call. Every tool runs with the signed-in user's Supabase session, so row-level
 // security limits the assistant to exactly what that user may see. Results are compact plain text to stay
@@ -19,7 +20,7 @@ export type TaskProposal = {
   priority: 'low' | 'medium' | 'high' | 'urgent'
 }
 
-export type ToolContext = { supabase: SupabaseClient; userId: string; proposals: TaskProposal[] }
+export type ToolContext = { supabase: SupabaseClient; userId: string; proposals: TaskProposal[]; timeZone?: string }
 
 const fn = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []): Groq.Chat.ChatCompletionTool => ({
   type: 'function',
@@ -44,6 +45,9 @@ export const AI_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   fn('get_calendar', 'Company events, the user\'s meetings and task deadlines in the coming days.', {
     days_ahead: { type: 'number', description: 'How many days ahead, up to 31. Default 7.' },
   }),
+  fn('get_ideas', 'Ideas on the team Ideas board, with status, author and comment count. Optionally filter by words.', {
+    query: { type: 'string', description: 'Optional words to filter by.' },
+  }),
   fn('create_task', 'Prepare a new task. It is NOT saved until the user clicks Confirm, so tell them to review it.', {
     title: { type: 'string' },
     project: { type: 'string', description: 'Project name.' },
@@ -59,6 +63,13 @@ const clip = (text: string | null | undefined, max: number) => {
   return value.length > max ? `${value.slice(0, max)}…` : value
 }
 const day = (value: string | null | undefined) => (value ? value.slice(0, 10) : 'none')
+
+/** A timestamp in the user's own time zone, e.g. "Thu 6 Nov 15:00". */
+function localTime(ctx: ToolContext, iso: string) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: ctx.timeZone || 'UTC', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso)).replace(',', '')
+  } catch { return iso.slice(0, 16).replace('T', ' ') + ' UTC' }
+}
 
 type Task = { id: string; title: string; description: string | null; board_id: string; column_id: string; priority: string; due_date: string | null; start_date?: string | null; assignee_id: string | null; created_by: string | null; archived_at?: string | null }
 
@@ -174,7 +185,7 @@ const tools: Record<string, (ctx: ToolContext, args: Record<string, unknown>) =>
     const rows = ((messages ?? []) as Array<{ user_id: string | null; body: string | null; created_at: string }>).reverse()
     if (!rows.length) return `${match.label} has no messages yet.`
     const who = await names(ctx, rows.map((row) => row.user_id))
-    return `${match.label}, last ${rows.length} messages (oldest first):\n${rows.map((row) => `- ${row.created_at.slice(0, 16).replace('T', ' ')} ${who.get(row.user_id ?? '') ?? 'someone'}: ${clip(row.body, 280) || '(attachment)'}`).join('\n')}`
+    return `${match.label}, last ${rows.length} messages (oldest first):\n${rows.map((row) => `- ${localTime(ctx, row.created_at)} ${who.get(row.user_id ?? '') ?? 'someone'}: ${clip(row.body, 280) || '(attachment)'}`).join('\n')}`
   },
 
   async get_calendar(ctx, args) {
@@ -185,16 +196,38 @@ const tools: Record<string, (ctx: ToolContext, args: Record<string, unknown>) =>
       ctx.supabase.from('workspace_events').select('title,starts_at,ends_at,visibility,recurrence,location').lte('starts_at', to.toISOString()).order('starts_at').limit(60),
       myTaskIds(ctx),
     ])
-    const upcoming = ((events ?? []) as Array<{ title: string; starts_at: string; ends_at: string; visibility: string; recurrence: string; location: string | null }>)
-      .filter((event) => event.recurrence !== 'none' || Date.parse(event.ends_at) >= from.getTime())
+    // Each event once, at its next occurrence inside the window (repeating events roll forward).
+    const upcoming = ((events ?? []) as Array<{ title: string; starts_at: string; ends_at: string; visibility: string; recurrence: 'none' | 'daily' | 'weekly' | 'monthly'; location: string | null }>)
+      .flatMap((event) => {
+        const next = nextOccurrence(event, from)
+        return next && next <= to ? [{ ...event, starts_at: next.toISOString() }] : []
+      })
+      .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
     const { data: tasks } = ids.length ? await ctx.supabase.from('project_tasks').select('*').in('id', ids).is('archived_at', null).not('due_date', 'is', null).lte('due_date', to.toISOString()) : { data: [] }
     const deadlines = (await describeTasks(ctx, (tasks ?? []) as Task[])).filter((row) => !isDone(row.status))
     return [
       `Events (next ${days} days):`,
-      ...(upcoming.length ? upcoming.map((event) => `- ${event.starts_at.slice(0, 16).replace('T', ' ')} UTC ${event.title} (${event.visibility === 'company' ? 'company-wide' : 'meeting'}${event.recurrence !== 'none' ? `, repeats ${event.recurrence}` : ''}${event.location ? `, ${event.location}` : ''})`) : ['- none']),
+      ...(upcoming.length ? upcoming.map((event) => `- ${localTime(ctx, event.starts_at)} ${event.title} (${event.visibility === 'company' ? 'company-wide' : 'meeting'}${event.recurrence !== 'none' ? `, repeats ${event.recurrence}` : ''}${event.location ? `, ${event.location}` : ''})`) : ['- none']),
       'Task deadlines (open, assigned to the user; includes overdue):',
       ...(deadlines.length ? deadlines.map((row) => row.line) : ['- none']),
     ].join('\n')
+  },
+
+  async get_ideas(ctx, args) {
+    const query = String(args.query ?? '').replace(/[%_,()]/g, ' ').trim()
+    let request = ctx.supabase.from('ideas').select('id,title,description,status,author_id,created_at').neq('status', 'archived').order('created_at', { ascending: false }).limit(25)
+    if (query) request = request.or(`title.ilike.%${query}%,description.ilike.%${query}%`)
+    const { data, error } = await request
+    if (error) throw error
+    const ideas = (data ?? []) as Array<{ id: string; title: string; description: string; status: string; author_id: string | null; created_at: string }>
+    if (!ideas.length) return query ? `No ideas match "${query}".` : 'There are no ideas on the board yet.'
+    const [who, { data: comments }] = await Promise.all([
+      names(ctx, ideas.map((idea) => idea.author_id)),
+      ctx.supabase.from('idea_comments').select('idea_id').in('idea_id', ideas.map((idea) => idea.id)),
+    ])
+    const counts = new Map<string, number>()
+    for (const row of (comments ?? []) as Array<{ idea_id: string }>) counts.set(row.idea_id, (counts.get(row.idea_id) ?? 0) + 1)
+    return ideas.map((idea) => `- ${idea.title} | status: ${idea.status.replace('_', ' ')} | by ${who.get(idea.author_id ?? '') ?? 'someone'} on ${day(idea.created_at)} | ${counts.get(idea.id) ?? 0} comments | ${clip(idea.description, 200)}`).join('\n')
   },
 
   async create_task(ctx, args) {

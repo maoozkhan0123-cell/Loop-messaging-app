@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 })
 
-  let body: { type?: string; title?: string; description?: string | null; boardId?: string; assigneeId?: string | null; dueDate?: string | null; priority?: string }
+  let body: { type?: string; id?: string; messageId?: string; title?: string; description?: string | null; boardId?: string; assigneeId?: string | null; dueDate?: string | null; priority?: string }
   try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }) }
   if (body.type !== 'create_task') return NextResponse.json({ error: 'Unknown action.' }, { status: 400 })
 
@@ -31,5 +31,14 @@ export async function POST(request: Request) {
     created_by: user.id,
   }).select('id,board_id').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // Mark the proposal as created in the saved chat (best effort; history may not be set up).
+  if (body.messageId && body.id) {
+    const { data: message } = await supabase.from('ai_messages').select('proposals').eq('id', body.messageId).maybeSingle()
+    if (message && Array.isArray(message.proposals)) {
+      const proposals = message.proposals.map((item: { id?: string }) => item.id === body.id ? { ...item, state: 'created', createdTaskId: task.id } : item)
+      await supabase.from('ai_messages').update({ proposals }).eq('id', body.messageId)
+    }
+  }
   return NextResponse.json({ taskId: task.id, boardId: task.board_id })
 }
