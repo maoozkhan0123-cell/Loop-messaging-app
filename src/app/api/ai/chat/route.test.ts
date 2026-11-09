@@ -71,6 +71,8 @@ describe('workspace AI chat route', () => {
     expect(options.messages[0].content).toContain('Left menu: Home, Messages, Projects')
     expect(options.messages[0].content).toContain('overview of accessible project boards')
     expect(options.messages[0].content).toContain('"All my tasks" opens Inbox')
+    expect(options.messages[0].content).toContain('Call only the exact tool names provided to you')
+    expect(options.messages[0].content).toContain('Reuse successful tool results instead of repeating identical lookups')
     expect(options.messages[0].content).not.toContain('id null')
     expect(options).toMatchObject({ model: 'openai/gpt-oss-120b', temperature: 0.3, max_completion_tokens: 1200, include_reasoning: false, reasoning_effort: 'low' })
   })

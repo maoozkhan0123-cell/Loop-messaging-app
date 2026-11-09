@@ -103,10 +103,12 @@ async function describeTasks(ctx: ToolContext, tasks: Task[]) {
 const isDone = (status: string) => /done|complete/i.test(status)
 
 async function myTaskIds(ctx: ToolContext) {
-  const [{ data: primary }, { data: extra }] = await Promise.all([
+  const [{ data: primary, error: primaryError }, { data: extra, error: extraError }] = await Promise.all([
     ctx.supabase.from('project_tasks').select('id').eq('assignee_id', ctx.userId).is('archived_at', null),
     ctx.supabase.from('project_task_assignees').select('task_id').eq('user_id', ctx.userId),
   ])
+  if (primaryError) throw primaryError
+  if (extraError) throw extraError
   return [...new Set([...((primary ?? []) as Array<{ id: string }>).map((row) => row.id), ...((extra ?? []) as Array<{ task_id: string }>).map((row) => row.task_id)])]
 }
 
@@ -199,10 +201,15 @@ const tools: Record<string, (ctx: ToolContext, args: Record<string, unknown>) =>
       myTaskIds(ctx),
     ])
     if (error) throw error
-    if (!boards?.length) return 'The user cannot see any projects.'
-    const { data: mine } = ids.length ? await ctx.supabase.from('project_tasks').select('*').in('id', ids).is('archived_at', null) : { data: [] }
+    if (!boards?.length) return 'Accessible projects: 0. No project boards were returned for this user.'
+    const { data: mine, error: tasksError } = ids.length ? await ctx.supabase.from('project_tasks').select('*').in('id', ids).is('archived_at', null) : { data: [], error: null }
+    if (tasksError) throw tasksError
     const open = (await describeTasks(ctx, (mine ?? []) as Task[])).filter((row) => !isDone(row.status))
-    return (boards as Array<{ id: string; name: string }>).map((board) => `- ${board.name}: ${open.filter((row) => row.task.board_id === board.id).length} open tasks assigned to the user`).join('\n')
+    return [
+      `Accessible projects: ${boards.length}.`,
+      'Every project below is visible to the user. Zero personally assigned open tasks does not mean a project is inaccessible.',
+      ...(boards as Array<{ id: string; name: string }>).map((board) => `- Project: ${board.name} | open tasks assigned to the user: ${open.filter((row) => row.task.board_id === board.id).length}`),
+    ].join('\n')
   },
 
   async get_channel_messages(ctx, args) {
