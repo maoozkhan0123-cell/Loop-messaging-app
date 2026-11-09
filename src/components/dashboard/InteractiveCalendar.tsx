@@ -66,19 +66,22 @@ export function InteractiveCalendar({ tasks, events = [], meId, boards, columns,
 
   return (
     <section aria-label="Task calendar">
-      <div className="flex items-center justify-between gap-3">
-        <div><h2 className="text-base font-semibold text-[var(--foreground)]">{format(currentDate, 'MMMM yyyy')}</h2><p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Your deadlines and events</p></div>
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={goToday} className="mr-1 h-8 rounded-md border border-[var(--ui-border)] px-2.5 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]">Today</button>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="min-w-0 text-base font-semibold text-[var(--foreground)]">{format(currentDate, 'MMMM yyyy')}</h2>
+        <div className="flex shrink-0 items-center gap-1">
           <button type="button" onClick={() => navigateMonth(-1)} aria-label="Previous month" className="grid h-8 w-8 place-items-center rounded-md border border-[var(--ui-border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]"><ChevronLeft size={15} /></button>
           <button type="button" onClick={() => navigateMonth(1)} aria-label="Next month" className="grid h-8 w-8 place-items-center rounded-md border border-[var(--ui-border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]"><ChevronRight size={15} /></button>
         </div>
       </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-[var(--muted-foreground)]">Your deadlines and events</p>
+        <button type="button" onClick={goToday} className="h-7 rounded-md border border-[var(--ui-border)] px-2.5 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--surface-muted)]">Today</button>
+      </div>
 
-      <div className="mt-5 grid grid-cols-7 text-center" aria-hidden="true">
+      <div className="mt-5 grid grid-cols-7 px-1 text-center" aria-hidden="true">
         {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day) => <span key={day} className="text-[10px] font-semibold tracking-wider text-[var(--muted-foreground)]">{day}</span>)}
       </div>
-      <div className="relative mt-2 min-h-[216px] overflow-hidden">
+      <div className="relative mt-2 min-h-[13.5rem] overflow-hidden p-1">
         <AnimatePresence initial={false} mode="wait" custom={direction}>
           <motion.div key={format(currentDate, 'yyyy-MM')} custom={direction} initial={{ opacity: 0, x: direction * 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: direction * -12 }} transition={{ duration: .15 }} className="grid grid-cols-7 gap-y-1">
             {days.map((day) => {
@@ -91,7 +94,7 @@ export function InteractiveCalendar({ tasks, events = [], meId, boards, columns,
                 const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowDown' ? 7 : event.key === 'ArrowUp' ? -7 : 0
                 if (!delta) return
                 event.preventDefault(); chooseDate(addDays(day, delta))
-              }} className={`relative mx-auto grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${selected ? 'bg-[var(--primary)] text-white shadow-sm' : isSameMonth(day,currentDate) ? 'text-[var(--foreground)] hover:bg-[var(--primary-soft)]' : 'text-[var(--muted-foreground)] opacity-45 hover:opacity-80'} ${isToday && !selected ? 'ring-1 ring-[var(--primary)]' : ''}`}>
+              }} className={`relative mx-auto grid aspect-square w-full min-w-0 max-w-9 place-items-center rounded-lg text-xs font-medium transition ${selected ? 'bg-[var(--primary)] text-white shadow-sm' : isSameMonth(day,currentDate) ? 'text-[var(--foreground)] hover:bg-[var(--primary-soft)]' : 'text-[var(--muted-foreground)] opacity-45 hover:opacity-80'} ${isToday && !selected ? 'ring-1 ring-[var(--primary)]' : ''}`}>
                 <span>{format(day, 'd')}</span>{(count > 0 || eventCount > 0) && <span className="absolute bottom-1 flex gap-0.5">{count > 0 && <span className={`h-1 w-1 rounded-full ${selected ? 'bg-white' : 'bg-[var(--primary)]'}`} />}{eventCount > 0 && <span className={`h-1 w-1 rounded-full ${selected ? 'bg-white/70' : 'bg-amber-500'}`} />}</span>}<span className="sr-only">{selected ? 'Selected' : ''}{isToday ? ' Today' : ''}</span>
               </button>
             })}

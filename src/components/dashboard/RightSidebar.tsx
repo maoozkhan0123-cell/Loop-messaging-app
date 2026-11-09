@@ -25,7 +25,7 @@ export function RightSidebar(props: RightSidebarProps) {
   const online = team.filter((profile) => profile.status === 'online').sort(byName)
   const away = team.filter((profile) => profile.status === 'away').sort(byName)
   const offline = team.filter((profile) => profile.status === 'offline').sort(byName)
-  return <aside className="space-y-4 border-t border-[var(--ui-border)] bg-[var(--surface-muted)] p-4 xl:sticky xl:top-0 xl:max-h-[calc(100vh-41px)] xl:overflow-y-auto xl:border-l xl:border-t-0">
+  return <aside className="grid min-w-0 items-start gap-6 lg:grid-cols-2 xl:grid-cols-1">
     <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--surface)] p-4 shadow-sm"><InteractiveCalendar tasks={props.tasks} events={props.events} meId={props.meId} boards={props.boards} columns={props.columns} profiles={props.profiles} onCreateTask={props.onCreateTask} onOpenTask={props.onOpenTask} creating={props.creatingTask} /></div>
     <section className="rounded-2xl border border-[var(--ui-border)] bg-[var(--surface)] p-4 shadow-sm" aria-labelledby="team-presence-heading">
       <div className="mb-3 flex items-center justify-between"><div><h2 id="team-presence-heading" className="text-sm font-semibold">Team members</h2><p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{online.length} online · {team.length} total</p></div><button type="button" onClick={props.onViewTeam} className="text-xs font-semibold text-[var(--primary)]">View all</button></div>

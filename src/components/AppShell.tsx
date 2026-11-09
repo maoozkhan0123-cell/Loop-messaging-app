@@ -99,7 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <MobileNavContext.Provider
       value={{ mobileMenuOpen, setMobileMenuOpen, toggleMobileMenu, closeMobileMenu }}
     >
-      <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--app-bg)' }}>
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden" style={{ background: 'var(--app-bg)' }}>
         {/* ── Top toolbar: spans full width ── */}
         <Toolbar />
         <AssistantPanel />
@@ -107,7 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* ── Body: sidebar (desktop/mobile) + content ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden relative md:pt-2" style={{ background: '#171936' }}>
           {/* Desktop view: side-by-side icon rail + workspace sidebar */}
-          <div className="hidden md:flex flex-shrink-0 h-full">
+          <div className="hidden min-h-0 flex-shrink-0 md:flex">
             <IconRail
               onOpenSidebar={() => setSidebarOpen(true)}
               onCloseSidebar={() => setSidebarOpen(false)}
@@ -179,7 +179,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
 
           {/* Main content area */}
-          <div className="flex flex-1 min-w-0 h-full overflow-hidden md:rounded-tl-2xl" style={{ background: 'var(--app-bg)' }}>
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden md:rounded-tl-2xl" style={{ background: 'var(--app-bg)' }}>
             {children}
           </div>
         </div>

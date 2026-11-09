@@ -352,8 +352,8 @@ function RailBtn({ icon: Icon, label, isActive, onClick, compact, onDark }: Rail
     >
       {isActive && (
         <>
-          <span aria-hidden className="pointer-events-none absolute -top-4 right-0 h-4 w-4" style={{ background: 'radial-gradient(circle at 0 0, transparent 15.5px, var(--rail-tab) 16px)' }} />
-          <span aria-hidden className="pointer-events-none absolute -bottom-4 right-0 h-4 w-4" style={{ background: 'radial-gradient(circle at 0 100%, transparent 15.5px, var(--rail-tab) 16px)' }} />
+          <span aria-hidden className="pointer-events-none absolute -top-4 right-0 h-4 w-4" style={{ background: 'radial-gradient(circle at 0 0, transparent calc(1rem - 0.5px), var(--rail-tab) 1rem)' }} />
+          <span aria-hidden className="pointer-events-none absolute -bottom-4 right-0 h-4 w-4" style={{ background: 'radial-gradient(circle at 0 100%, transparent calc(1rem - 0.5px), var(--rail-tab) 1rem)' }} />
         </>
       )}
       <Icon size={18} className={cn('flex-shrink-0 transition-transform', !isActive && 'group-hover:scale-110')} />
