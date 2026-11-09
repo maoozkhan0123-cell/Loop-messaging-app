@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendAccountLinkEmail } from '@/lib/email'
 import { COMPANY_EMAIL_ERROR, isCompanyEmail } from '@/lib/auth/companyEmail'
+import { channelRoleForWorkspaceRole, isWorkspaceAdmin } from '@/lib/auth/workspace'
+import { listWorkspaceUsers, recordMemberAudit } from '@/lib/memberAdministration'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -10,7 +12,7 @@ async function requireAdmin() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: NextResponse.json({ error: 'Please sign in again.' }, { status: 401 }) }
-  if (user.app_metadata?.role !== 'admin' && user.email !== 'loop@bytechsol.com') {
+  if (!isWorkspaceAdmin(user.app_metadata?.role, user.email)) {
     return { error: NextResponse.json({ error: 'Only workspace admins can manage members.' }, { status: 403 }) }
   }
   return { user }
@@ -21,10 +23,10 @@ export async function GET() {
     const auth = await requireAdmin()
     if (auth.error) return auth.error
     const admin = createAdminClient()
-    const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-    if (error) throw error
-    const { data: channelMembers } = await admin.from('channel_members').select('user_id, channel_id, channels!inner(type)').eq('channels.type', 'public')
-    return NextResponse.json({ members: data.users.map((member) => ({
+    const users = await listWorkspaceUsers(admin)
+    const { data: channelMembers, error: membershipError } = await admin.from('channel_members').select('user_id, channel_id, channels!inner(type)').eq('channels.type', 'public')
+    if (membershipError) throw membershipError
+    return NextResponse.json({ members: users.map((member) => ({
       id: member.id,
       email: member.email,
       role: ['admin', 'ceo'].includes(member.app_metadata?.role) ? member.app_metadata.role : 'member',
@@ -47,8 +49,10 @@ export async function POST(request: Request) {
     const displayName = String(body.displayName ?? '').trim()
     const email = String(body.email ?? '').trim().toLowerCase()
     const jobTitle = String(body.jobTitle ?? 'Teammate').trim() || 'Teammate'
-    const accessRole = ['admin', 'ceo'].includes(body.accessRole) ? body.accessRole : 'member'
-    const requestedChannelIds = Array.isArray(body.channelIds) ? body.channelIds.map(String) : []
+    const accessRole = body.accessRole ?? 'member'
+    if (!['member', 'admin', 'ceo'].includes(accessRole)) return NextResponse.json({ error: 'Choose a valid workspace role.' }, { status: 400 })
+    if (body.channelIds !== undefined && !Array.isArray(body.channelIds)) return NextResponse.json({ error: 'Choose valid public channels.' }, { status: 400 })
+    const requestedChannelIds = Array.isArray(body.channelIds) ? [...new Set(body.channelIds.map(String))] : undefined
 
     if (displayName.length < 2) {
       return NextResponse.json({ error: 'Enter the member’s full name.' }, { status: 400 })
@@ -60,12 +64,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: COMPANY_EMAIL_ERROR }, { status: 400 })
     }
     const admin = createAdminClient()
+    // An invite link can reuse an existing, unconfirmed account. Never provision
+    // or roll back an account that existed before this invitation request.
+    const existingUsers = await listWorkspaceUsers(admin)
+    if (existingUsers.some((member) => member.email?.toLowerCase() === email)) {
+      return NextResponse.json({ error: 'A member with this email already exists.' }, { status: 409 })
+    }
+    const { data: publicChannels, error: channelError } = await admin.from('channels').select('id').eq('type', 'public').is('archived_at', null)
+    if (channelError) throw channelError
+    const selected = requestedChannelIds === undefined ? publicChannels : publicChannels?.filter((channel) => requestedChannelIds.includes(channel.id))
     const origin = new URL(request.url).origin
     const { data: created, error: createError } = await admin.auth.admin.generateLink({
       type: 'invite',
       email,
       options: {
-        data: { display_name: displayName, role: accessRole },
+        data: { display_name: displayName },
         redirectTo: `${origin}/set-password`,
       },
     })
@@ -79,55 +92,31 @@ export async function POST(request: Request) {
     }
 
     const memberId = created.user.id
-    await admin.auth.admin.updateUserById(memberId, { app_metadata: { role: accessRole } })
-    const { error: profileError } = await admin.from('profiles').upsert({
-      id: memberId,
-      email,
-      display_name: displayName,
-      job_title: jobTitle,
-      status: 'offline',
-    }, { onConflict: 'id' })
-
-    if (profileError) {
-      await admin.auth.admin.deleteUser(memberId)
-      throw profileError
-    }
-
-    const { data: publicChannels, error: channelError } = await admin
-      .from('channels')
-      .select('id')
-      .eq('type', 'public')
-      .is('archived_at', null)
-    if (channelError) throw channelError
-
-    const selected = requestedChannelIds.length
-      ? publicChannels?.filter((channel) => requestedChannelIds.includes(channel.id))
-      : publicChannels
-    if (selected?.length) {
-      const { error: memberError } = await admin.from('channel_members').upsert(
-        selected.map((channel) => ({
-          channel_id: channel.id,
-          user_id: memberId,
-          role: accessRole,
-        })),
-        { onConflict: 'channel_id,user_id' }
-      )
-      if (memberError) throw memberError
-    }
-
     try {
+      const { error: roleError } = await admin.auth.admin.updateUserById(memberId, { app_metadata: { ...created.user.app_metadata, role: accessRole } })
+      if (roleError) throw roleError
+      const { error: profileError } = await admin.from('profiles').upsert({ id: memberId, email, display_name: displayName, job_title: jobTitle, status: 'offline' }, { onConflict: 'id' })
+      if (profileError) throw profileError
+      if (selected?.length) {
+        const { error: memberError } = await admin.from('channel_members').upsert(
+          selected.map((channel) => ({ channel_id: channel.id, user_id: memberId, role: channelRoleForWorkspaceRole(accessRole) })),
+          { onConflict: 'channel_id,user_id' }
+        )
+        if (memberError) throw memberError
+      }
       await sendAccountLinkEmail({
         to: email,
         name: displayName,
         link: created.properties.action_link,
         kind: 'invite',
       })
-    } catch (mailError) {
-      await admin.auth.admin.deleteUser(memberId)
-      throw mailError
+    } catch (provisionError) {
+      const { error: cleanupError } = await admin.auth.admin.deleteUser(memberId)
+      if (cleanupError) console.error('Incomplete member invitation could not be rolled back.', cleanupError.code || 'unknown')
+      throw provisionError
     }
 
-    await admin.from('member_audit_logs').insert({ actor_id: auth.user.id, target_id: memberId, action: 'invite', details: { email, role: accessRole, channel_ids: selected?.map((channel) => channel.id) ?? [] } }).then(() => undefined)
+    await recordMemberAudit(admin, { actor_id: auth.user.id, target_id: memberId, action: 'invite', details: { email, role: accessRole, channel_ids: selected?.map((channel) => channel.id) ?? [] } })
 
     return NextResponse.json({
       member: { id: memberId, displayName, email, jobTitle, accessRole },

@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils'
 import { useMobileNav } from '@/components/AppShell'
 import { useToast } from '@/components/ui/Toaster'
 import { PreferencesModal } from '@/components/PreferencesModal'
+import { usePreferences } from '@/hooks/usePreferences'
+import { resolvePresenceStatus } from '@/lib/presence'
 
 interface IconRailProps {
   onOpenSidebar: () => void
@@ -32,6 +34,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
   const { data: profile } = useProfile()
   const updateProfile = useUpdateProfile()
   const { toast } = useToast()
+  const { preferences, setPreference } = usePreferences()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -69,8 +72,9 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
   }
 
   const handleStatusToggle = () => {
-    const newStatus = profile?.status === 'away' ? 'online' : 'away'
-    updateProfile.mutate({ status: newStatus })
+    const newStatus = preferences.availability === 'away' ? 'online' : 'away'
+    setPreference('availability', newStatus)
+    updateProfile.mutate({ status: resolvePresenceStatus(newStatus, preferences.onlineStatus, document.hidden) })
   }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,7 +227,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
                 </button>
               </div>
               <div className="bg-white pb-2 px-1">
-                <MenuItem onClick={handleStatusToggle} label={<span>Set yourself as <span className="font-bold">{profile.status === 'away' ? 'active' : 'away'}</span></span>} />
+                <MenuItem onClick={handleStatusToggle} label={<span>Set yourself as <span className="font-bold">{preferences.availability === 'away' ? 'active' : 'away'}</span></span>} />
                 {/* Notifications toggle row */}
                 <button
                   type="button"

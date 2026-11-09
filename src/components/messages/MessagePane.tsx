@@ -31,7 +31,11 @@ type ActiveTab = 'messages' | 'files'
 
 const PRESENCE_LABEL: Record<Profile['status'], string> = { online: 'Active now', away: 'Away', offline: 'Offline' }
 
-export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
+export function MessagePane(props: MessagePaneProps) {
+  return <ConversationPane key={props.channel.id} {...props} />
+}
+
+function ConversationPane({ channel, currentUserId }: MessagePaneProps) {
   const [threadMessage, setThreadMessage] = useState<Message | null>(null)
   const [activeTab, setActiveTab] = useState<ActiveTab>('messages')
   const [chatSearchOpen, setChatSearchOpen] = useState(false)
@@ -208,9 +212,10 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: '100%' }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[360px] h-full bg-white flex-shrink-0 border-l border-[#E5E7EB]"
+            className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[360px] h-dvh md:h-full bg-white flex-shrink-0 border-l border-[#E5E7EB]"
           >
             <ThreadPanel
+              key={threadMessage.id}
               message={threadMessage}
               channelId={channel.id}
               currentUserId={currentUserId}
@@ -250,7 +255,7 @@ export function MessagePane({ channel, currentUserId }: MessagePaneProps) {
 // ── Files tab ──────────────────────────────────────────────────────────────
 
 function FilesTab({ channelId, currentUserId }: { channelId: string; currentUserId: string }) {
-  const { data: files, isLoading } = useChannelFiles(channelId)
+  const { data: files, isLoading, isError, error, refetch } = useChannelFiles(channelId)
 
   if (isLoading) {
     return (
@@ -258,6 +263,10 @@ function FilesTab({ channelId, currentUserId }: { channelId: string; currentUser
         <div className="w-5 h-5 border-2 border-[#3589FA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  if (isError) {
+    return <div role="alert" className="flex-1 px-4 pt-10 sm:px-6"><h3 className="text-sm font-semibold text-[var(--foreground)]">Unable to load conversation files</h3><p className="mt-2 text-xs text-[var(--muted-foreground)]">{error instanceof Error ? error.message : 'Please try again.'}</p><button type="button" onClick={() => void refetch()} className="mt-3 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white">Retry files</button></div>
   }
 
   if (!files || files.length === 0) {
@@ -285,7 +294,7 @@ function FilesTab({ channelId, currentUserId }: { channelId: string; currentUser
               key={file.id}
               className="flex items-center gap-3 p-3 rounded-xl border border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] transition-colors group"
             >
-              {isImage ? (
+              {isImage && url ? (
                 <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt={file.file_name} className="w-full h-full object-cover" />
@@ -301,14 +310,14 @@ function FilesTab({ channelId, currentUserId }: { channelId: string; currentUser
                   {formatFileSize(file.size_bytes)} · {isOwn ? 'You' : 'Shared'} · {format(new Date(file.message_created_at), 'MMM d, yyyy')}
                 </p>
               </div>
-              <a
+              {url ? <a
                 href={url}
                 download={file.file_name}
                 aria-label={`Download ${file.file_name}`}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-colors md:opacity-0 md:group-hover:opacity-100"
               >
                 <Download size={15} />
-              </a>
+              </a> : <span className="text-[11px] text-[var(--muted-foreground)]">File unavailable</span>}
             </div>
           )
         })}
@@ -342,6 +351,7 @@ function TabButton({ label, isActive, onClick, icon }: { label: string; isActive
     <button
       type="button"
       role="tab"
+      aria-label={label}
       aria-selected={isActive}
       title={label}
       onClick={onClick}

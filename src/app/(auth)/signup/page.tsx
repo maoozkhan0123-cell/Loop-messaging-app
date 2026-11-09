@@ -26,14 +26,15 @@ export default function SignupPage() {
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (!isCompanyEmail(email)) { setError(COMPANY_EMAIL_ERROR); return }
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!isCompanyEmail(normalizedEmail)) { setError(COMPANY_EMAIL_ERROR); return }
     setLoading(true)
 
     try {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, displayName, password }),
+        body: JSON.stringify({ email: normalizedEmail, displayName: displayName.trim() }),
       })
 
       const text = await res.text()
@@ -48,7 +49,8 @@ export default function SignupPage() {
         throw new Error((data.error as string) || 'Failed to send verification code')
       }
 
-      setInfoMsg(`Verification code sent to ${email} from info@Bytechsol.com`)
+      setEmail(normalizedEmail)
+      setInfoMsg(`Verification code sent to ${normalizedEmail} from info@Bytechsol.com`)
       setStep('otp')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -67,7 +69,7 @@ export default function SignupPage() {
       const res = await fetch('/api/auth/signup-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: otpCode }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), code: otpCode.trim(), password }),
       })
 
       const text = await res.text()
@@ -82,8 +84,9 @@ export default function SignupPage() {
         throw new Error((data.error as string) || 'Failed to verify code')
       }
 
-      // Success -> Redirect to workspace
-      router.push('/')
+      setPassword('')
+      setOtpCode('')
+      router.push(data.redirectTo === '/login' ? '/login' : '/')
       router.refresh()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Verification failed')
@@ -112,16 +115,16 @@ export default function SignupPage() {
 
               <form onSubmit={handleSendOTP} className="space-y-4">
                 {error && (
-                  <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5">
+                  <div role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5">
                     {error}
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1.5">Full name</label>
+                  <label htmlFor="signup-name" className="block text-xs font-medium text-[#374151] mb-1.5">Full name</label>
                   <div className="relative">
                     <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                    <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+                    <input id="signup-name" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
                       placeholder="Jane Doe" required
                       className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
@@ -129,10 +132,10 @@ export default function SignupPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1.5">Work email</label>
+                  <label htmlFor="signup-email" className="block text-xs font-medium text-[#374151] mb-1.5">Work email</label>
                   <div className="relative">
                     <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    <input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@Bytechsol.com" required
                       className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
@@ -140,10 +143,10 @@ export default function SignupPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1.5">Password</label>
+                  <label htmlFor="signup-password" className="block text-xs font-medium text-[#374151] mb-1.5">Password</label>
                   <div className="relative">
                     <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                    <input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                       placeholder="Min. 8 characters" required minLength={8}
                       className="w-full pl-9 pr-3 h-9 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />
@@ -182,17 +185,17 @@ export default function SignupPage() {
               )}
 
               {error && (
-                <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5 mb-4">
+                <div role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5 mb-4">
                   {error}
                 </div>
               )}
 
               <form onSubmit={handleVerifyOTP} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-[#374151] mb-1.5">6-Digit Code</label>
+                  <label htmlFor="signup-code" className="block text-xs font-medium text-[#374151] mb-1.5">6-Digit Code</label>
                   <div className="relative">
                     <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                    <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)}
+                    <input id="signup-code" type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)}
                       placeholder="123456" maxLength={6} required autoFocus
                       className="w-full pl-9 pr-3 h-10 text-base font-mono tracking-widest border border-[#E5E7EB] rounded-lg focus:outline-none transition-colors text-center text-black bg-white"
                       onFocus={focusStyle} onBlur={blurStyle} />

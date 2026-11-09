@@ -14,7 +14,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { useIdeas, useIdeaComments } from '@/hooks/useIdeas'
 import { useIsWorkspaceAdmin, useProfile } from '@/hooks/useProfile'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
-import type { Idea, IdeaStatus } from '@/types/database'
+import type { Idea, IdeaComment, IdeaStatus } from '@/types/database'
 
 const STATUS_CONFIG: Record<
   IdeaStatus,
@@ -28,7 +28,7 @@ const STATUS_CONFIG: Record<
 }
 
 export default function IdeasPage() {
-  const { ideas, isLoading, createIdea, updateStatus, deleteIdea, addComment } = useIdeas()
+  const { ideas, isLoading, isError, error, refetch, createIdea, updateStatus, deleteIdea, addComment } = useIdeas()
   const { data: currentProfile } = useProfile()
   const isAdmin = useIsWorkspaceAdmin()
 
@@ -36,22 +36,35 @@ export default function IdeasPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null)
 
   const filteredIdeas = ideas.filter(
     (i) =>
-      i.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.description.toLowerCase().includes(searchQuery.toLowerCase())
+      i.title.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+      i.description.toLowerCase().includes(searchQuery.trim().toLowerCase())
   )
 
   const handleSubmitIdea = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newTitle.trim() || !newDesc.trim()) return
-    await createIdea({ title: newTitle.trim(), description: newDesc.trim() })
-    setNewTitle('')
-    setNewDesc('')
-    setShowSubmitModal(false)
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    setSubmitError('')
+    try {
+      await createIdea({ title: newTitle.trim(), description: newDesc.trim() })
+      setNewTitle('')
+      setNewDesc('')
+      setShowSubmitModal(false)
+    } catch (reason) { setSubmitError(messageOf(reason, 'The idea could not be saved. Try again.')) }
+    finally { setIsSubmitting(false) }
+  }
+  const runAction = async (action: () => Promise<unknown>) => {
+    setActionError('')
+    try { await action() } catch (reason) { setActionError(messageOf(reason, 'The change could not be saved. Try again.')) }
   }
 
   return (
@@ -77,6 +90,7 @@ export default function IdeasPage() {
             <input
               type="text"
               placeholder="Search team ideas..."
+              aria-label="Search team ideas"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 pr-3 py-1.5 text-xs bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg w-full sm:w-52 focus:outline-none focus:border-[#000000] focus:bg-white transition-all"
@@ -94,27 +108,30 @@ export default function IdeasPage() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto w-full space-y-4">
+      <main className="min-h-0 flex-1 p-4 sm:p-6 overflow-y-auto w-full space-y-4">
+        {actionError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</p>}
         {isLoading ? (
           <div className="py-20 flex items-center justify-center text-[#A1A1AA] text-sm gap-2">
             <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
             Loading team ideas...
           </div>
+        ) : isError ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><h2 className="font-semibold">Ideas could not be loaded</h2><p className="mt-1">{messageOf(error, 'Check your connection and try again.')}</p><button type="button" onClick={() => void refetch()} className="mt-3 rounded-lg border border-current px-3 py-1.5 font-semibold">Retry ideas</button></div>
         ) : filteredIdeas.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-[#E4E4E7] shadow-xs max-w-md">
             <div className="w-14 h-14 rounded-2xl bg-[#F4F4F5] flex items-center justify-center text-black mx-auto mb-3 border border-[#E4E4E7]">
               <Sparkles size={28} />
             </div>
-            <h3 className="text-base font-bold text-[#000000] mb-1">No Ideas Submitted Yet</h3>
+            <h3 className="text-base font-bold text-[#000000] mb-1">{searchQuery.trim() ? 'No matching ideas' : 'No Ideas Submitted Yet'}</h3>
             <p className="text-xs text-[#71717A] mb-5">
-              Submit the first idea to share your thoughts with the team!
+              {searchQuery.trim() ? 'Try another title or description.' : 'Submit the first idea to share your thoughts with the team!'}
             </p>
             <button
               type="button"
-              onClick={() => setShowSubmitModal(true)}
+              onClick={() => searchQuery.trim() ? setSearchQuery('') : setShowSubmitModal(true)}
               className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-[#18181B] rounded-xl shadow-xs"
             >
-              Submit Idea
+              {searchQuery.trim() ? 'Clear search' : 'Submit Idea'}
             </button>
           </div>
         ) : (
@@ -148,7 +165,7 @@ export default function IdeasPage() {
                         {(isAdmin || idea.author_id === currentProfile?.id) && <select
                           value={idea.status}
                           onChange={(e) =>
-                            updateStatus({ ideaId: idea.id, status: e.target.value as IdeaStatus })
+                            void runAction(() => updateStatus({ ideaId: idea.id, status: e.target.value as IdeaStatus }))
                           }
                           className="text-[10px] font-semibold bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-2 py-0.5 text-[#475569] cursor-pointer focus:outline-none"
                         >
@@ -163,7 +180,7 @@ export default function IdeasPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              void confirmDialog({ title: `Delete “${idea.title}”?`, description: 'The idea and its comments will be removed for everyone.' }).then((ok) => { if (ok) deleteIdea(idea.id) })
+                              void confirmDialog({ title: `Delete “${idea.title}”?`, description: 'The idea and its comments will be removed for everyone.' }).then((ok) => { if (ok) void runAction(() => deleteIdea(idea.id)) })
                             }}
                             className="text-[#94A3B8] hover:text-[#DC2626] p-1 rounded-lg"
                             title="Delete Idea"
@@ -227,24 +244,26 @@ export default function IdeasPage() {
       {/* MODAL: Submit New Idea */}
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#E5E7EB]">
+          <div role="dialog" aria-modal="true" aria-labelledby="submit-idea-heading" className="max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#E5E7EB]">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 text-[#D97706]">
                 <Lightbulb size={20} />
-                <h3 className="text-base font-bold text-[#0D1F31]">Submit Team Idea</h3>
+                <h3 id="submit-idea-heading" className="text-base font-bold text-[#0D1F31]">Submit Team Idea</h3>
               </div>
-              <button onClick={() => setShowSubmitModal(false)} className="text-[#9CA3AF] hover:text-[#0D1F31]">
+              <button type="button" aria-label="Close idea form" disabled={isSubmitting} onClick={() => setShowSubmitModal(false)} className="text-[#9CA3AF] hover:text-[#0D1F31] disabled:opacity-50">
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSubmitIdea} className="space-y-4">
+              {submitError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{submitError}</p>}
               <div>
                 <label className="block text-xs font-semibold text-[#4B5563] mb-1">Title *</label>
                 <input
                   type="text"
                   required
                   placeholder="What is your idea or suggestion?"
+                  aria-label="Idea title"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#D97706]"
@@ -257,6 +276,7 @@ export default function IdeasPage() {
                   required
                   rows={5}
                   placeholder="Explain the details of your idea so the team can think about it..."
+                  aria-label="Idea description"
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#D97706] leading-relaxed"
@@ -266,6 +286,7 @@ export default function IdeasPage() {
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setShowSubmitModal(false)}
                   className="px-3.5 py-1.5 text-xs font-semibold text-[#4B5563] hover:bg-[#F3F4F6] rounded-lg"
                 >
@@ -273,9 +294,10 @@ export default function IdeasPage() {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="px-4 py-1.5 text-xs font-semibold text-white bg-[#D97706] hover:bg-[#B45309] rounded-lg shadow-xs"
                 >
-                  Submit Idea
+                  {isSubmitting ? 'Submitting…' : 'Submit Idea'}
                 </button>
               </div>
             </form>
@@ -286,7 +308,7 @@ export default function IdeasPage() {
       {/* MODAL: Idea Discussion */}
       {selectedIdea && (
         <IdeaDetailModal
-          idea={selectedIdea}
+          idea={ideas.find(idea => idea.id === selectedIdea.id) ?? selectedIdea}
           onClose={() => setSelectedIdea(null)}
           onAddComment={addComment}
         />
@@ -302,23 +324,29 @@ function IdeaDetailModal({
 }: {
   idea: Idea
   onClose: () => void
-  onAddComment: (params: any) => Promise<any>
+  onAddComment: (params: { ideaId: string; content: string }) => Promise<IdeaComment>
 }) {
   const [commentText, setCommentText] = useState('')
-  const { data: comments = [], isLoading } = useIdeaComments(idea.id)
+  const { data: comments = [], isLoading, isError, error, refetch } = useIdeaComments(idea.id)
+  const [commentError, setCommentError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!commentText.trim()) return
-    await onAddComment({ ideaId: idea.id, content: commentText.trim() })
-    setCommentText('')
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    setCommentError('')
+    try { await onAddComment({ ideaId: idea.id, content: commentText.trim() }); setCommentText('') }
+    catch (reason) { setCommentError(messageOf(reason, 'Your comment could not be saved. Try again.')) }
+    finally { setIsSubmitting(false) }
   }
 
   const statusCfg = STATUS_CONFIG[idea.status] || STATUS_CONFIG.under_review
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-[#E5E7EB] max-h-[90vh] flex flex-col">
+      <div role="dialog" aria-modal="true" aria-labelledby="idea-discussion-heading" className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-[#E5E7EB] max-h-[calc(100dvh-2rem)] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]">
           <span
@@ -332,14 +360,14 @@ function IdeaDetailModal({
             {statusCfg.label}
           </span>
 
-          <button onClick={onClose} className="text-[#9CA3AF] hover:text-[#0D1F31]">
+          <button type="button" aria-label="Close idea discussion" disabled={isSubmitting} onClick={onClose} className="text-[#9CA3AF] hover:text-[#0D1F31]">
             <X size={18} />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-4">
-          <h2 className="text-lg font-bold text-[#0D1F31]">{idea.title}</h2>
+        <div className="min-h-0 flex-1 overflow-y-auto py-4 space-y-4">
+          <h2 id="idea-discussion-heading" className="text-lg font-bold text-[#0D1F31]">{idea.title}</h2>
           <p className="text-xs text-[#334155] leading-relaxed whitespace-pre-wrap">{idea.description}</p>
 
           <div className="flex items-center gap-2 text-xs text-[#64748B] pt-2 border-t border-[#F1F5F9]">
@@ -358,6 +386,8 @@ function IdeaDetailModal({
             <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-1">
               {isLoading ? (
                 <p className="text-xs text-[#9CA3AF]">Loading comments...</p>
+              ) : isError ? (
+                <div role="alert" className="text-xs text-red-700"><p>{messageOf(error, 'Comments could not be loaded.')}</p><button type="button" onClick={() => void refetch()} className="mt-2 underline">Retry comments</button></div>
               ) : comments.length === 0 ? (
                 <p className="text-xs text-[#9CA3AF] italic">No comments yet. Share your feedback!</p>
               ) : (
@@ -381,19 +411,22 @@ function IdeaDetailModal({
             </div>
 
             {/* Comment Form */}
+            {commentError && <p role="alert" className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">{commentError}</p>}
             <form onSubmit={handleCommentSubmit} className="flex gap-2">
               <input
                 type="text"
                 placeholder="Share your thoughts on this idea..."
+                aria-label="Comment on idea"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#D97706]"
+                className="min-w-0 flex-1 px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#D97706]"
               />
               <button
                 type="submit"
+                disabled={isSubmitting || !commentText.trim()}
                 className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#D97706] hover:bg-[#B45309] rounded-lg"
               >
-                Comment
+                {isSubmitting ? 'Posting…' : 'Comment'}
               </button>
             </form>
           </div>
@@ -401,4 +434,9 @@ function IdeaDetailModal({
       </div>
     </div>
   )
+}
+
+function messageOf(reason: unknown, fallback: string) {
+  if (reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string') return reason.message
+  return fallback
 }

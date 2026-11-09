@@ -5,5 +5,5 @@ export const COMPANY_EMAIL_DOMAIN = 'bytechsol.com'
 export const COMPANY_EMAIL_ERROR = `Only @${COMPANY_EMAIL_DOMAIN} email addresses can join this workspace.`
 
 export function isCompanyEmail(email: string) {
-  return email.trim().toLowerCase().endsWith(`@${COMPANY_EMAIL_DOMAIN}`)
+  return /^[^\s@]+@bytechsol\.com$/i.test(email.trim())
 }

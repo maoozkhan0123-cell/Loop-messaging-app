@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Command } from 'cmdk'
-import { Hash, Lock, Search, X, Home, Users, Files, Lightbulb, Kanban, Settings, Inbox, CalendarDays, ScanSearch, Plus } from 'lucide-react'
+import { Hash, Lock, Search, X, Home, Users, Files, Lightbulb, Kanban, Settings, Inbox, CalendarDays, ScanSearch, Plus, MessageSquare } from 'lucide-react'
 import { useChannels } from '@/hooks/useChannels'
 import type { ChannelWithMember } from '@/types/database'
 import { Avatar } from '@/components/ui/Avatar'
@@ -46,7 +46,7 @@ export function CommandPalette() {
   const filteredDMs = query
     ? dmChannels.filter((c) => {
         const other = c.other_member as { display_name: string } | undefined
-        return other?.display_name?.toLowerCase().includes(query.toLowerCase())
+        return (other?.display_name ?? c.name)?.toLowerCase().includes(query.toLowerCase())
       })
     : dmChannels.slice(0, 5)
 
@@ -65,6 +65,7 @@ export function CommandPalette() {
 
   const actions = [
     { label: 'Home', href: '/dashboard', icon: Home },
+    { label: 'Messages', href: '/messages', icon: MessageSquare },
     { label: 'Inbox', href: '/inbox', icon: Inbox },
     { label: 'Calendar', href: '/calendar', icon: CalendarDays },
     { label: 'Team directory', href: '/people', icon: Users },
@@ -73,12 +74,16 @@ export function CommandPalette() {
     { label: 'Ideas', href: '/ideas', icon: Lightbulb },
     { label: 'Create a task', href: '/projects?newTask=1', icon: Plus },
   ].filter((action) => !query || action.label.toLowerCase().includes(query.toLowerCase()))
+  const showPreferences = !query || 'preferences settings'.includes(query.toLowerCase())
+  const showSearch = !query || 'search workspace messages'.includes(query.toLowerCase())
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" />
-        <Dialog.Content className="fixed top-[20%] left-1/2 -translate-x-1/2 z-50 w-full max-w-lg">
+        <Dialog.Content className="fixed top-[12%] left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
+          <Dialog.Title className="sr-only">Quick navigation</Dialog.Title>
+          <Dialog.Description className="sr-only">Find a page, conversation or workspace command.</Dialog.Description>
           <Command
             className="w-full bg-white rounded-xl shadow-2xl border border-[#E5E7EB] overflow-hidden"
             shouldFilter={false}
@@ -106,21 +111,21 @@ export function CommandPalette() {
                 No results for &quot;{query}&quot;
               </Command.Empty>
 
-              {actions.length > 0 && (
+              {(actions.length > 0 || showPreferences || showSearch) && (
                 <Command.Group heading={<span className="px-4 py-1.5 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider block">Navigate</span>}>
                   {actions.map(({ label, href, icon: Icon }) => (
                     <Command.Item key={href} value={label} onSelect={() => navigateTo(href)} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
                       <Icon size={15} className="text-[#6B7280]" /><span>{label}</span>
                     </Command.Item>
                   ))}
-                  {(!query || 'preferences settings'.includes(query.toLowerCase())) && (
+                  {showPreferences && (
                     <Command.Item value="Preferences settings" onSelect={() => { setOpen(false); window.dispatchEvent(new Event('bysync:open-preferences')) }} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
                       <Settings size={15} className="text-[#6B7280]" /><span>Open Preferences</span><kbd className="ml-auto text-[10px] text-[#9CA3AF]">Ctrl ,</kbd>
                     </Command.Item>
                   )}
-                  {(!query || 'search messages files people tasks'.includes(query.toLowerCase())) && (
-                    <Command.Item value="Search messages files people tasks" onSelect={() => { setOpen(false); window.dispatchEvent(new Event('open-global-search')) }} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
-                      <ScanSearch size={15} className="text-[#6B7280]"/><span>Search workspace</span><kbd className="ml-auto text-[10px] text-[#9CA3AF]">Ctrl F</kbd>
+                  {showSearch && (
+                    <Command.Item value="Search workspace messages" onSelect={() => { setOpen(false); window.dispatchEvent(new Event('open-global-search')) }} className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer data-[selected]:bg-[#EBF0FC]">
+                      <ScanSearch size={15} className="text-[#6B7280]"/><span>Search messages</span><kbd className="ml-auto text-[10px] text-[#9CA3AF]">Ctrl F</kbd>
                     </Command.Item>
                   )}
                 </Command.Group>
@@ -174,11 +179,11 @@ export function CommandPalette() {
                       >
                         <Avatar
                           src={other?.avatar_url}
-                          name={other?.display_name ?? 'Unknown'}
+                          name={other?.display_name ?? channel.name ?? 'Group conversation'}
                           size={20}
                           status={other?.status}
                         />
-                        <span className="font-medium text-[#111827]">{other?.display_name ?? 'Unknown'}</span>
+                        <span className="font-medium text-[#111827]">{other?.display_name ?? channel.name ?? 'Group conversation'}</span>
                       </Command.Item>
                     )
                   })}

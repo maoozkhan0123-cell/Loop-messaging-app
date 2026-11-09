@@ -27,9 +27,9 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
   const isAtBottomRef = useRef(true)
   const [showJump, setShowJump] = useState(false)
 
-  const allMessages = data?.pages.flatMap((p) => p) ?? []
+  const allMessages = data?.pages.slice().reverse().flatMap((page) => page) ?? []
   const messages = searchQuery?.trim()
-    ? allMessages.filter((m) => m.body?.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? allMessages.filter((m) => m.body?.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : allMessages
 
   // Auto-scroll to bottom on new messages
@@ -53,9 +53,10 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
 
     if (el.scrollTop < 100 && hasNextPage && !isFetchingNextPage) {
       const prevHeight = el.scrollHeight
+      const prevScrollTop = el.scrollTop
       fetchNextPage().then(() => {
         requestAnimationFrame(() => {
-          el.scrollTop = el.scrollHeight - prevHeight
+          el.scrollTop = prevScrollTop + el.scrollHeight - prevHeight
         })
       })
     }
@@ -112,7 +113,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-    <div ref={containerRef} className="flex-1 overflow-y-auto pb-2" onScroll={handleScroll}>
+    <div ref={containerRef} role="log" aria-label={parentId ? 'Thread replies' : 'Conversation messages'} className="flex-1 overflow-y-auto pb-2" onScroll={handleScroll}>
       {isFetchingNextPage && (
         <div className="flex justify-center py-2">
           <Loader2 size={16} className="animate-spin text-[#9CA3AF]" />

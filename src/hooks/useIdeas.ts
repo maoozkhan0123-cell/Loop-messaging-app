@@ -16,6 +16,7 @@ export function useIdeas() {
 
   const query = useQuery({
     queryKey: ['ideas'],
+    refetchOnMount: true,
     queryFn: async () => {
       const { data: ideasData, error: ideasErr } = await supabase
         .from('ideas')
@@ -76,6 +77,7 @@ export function useIdeas() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'idea_comments' }, () => {
         queryClient.invalidateQueries({ queryKey: ['ideas'] })
+        queryClient.invalidateQueries({ queryKey: ['idea_comments'] })
       })
       .subscribe()
 
@@ -165,8 +167,8 @@ export function useIdeas() {
   })
 
   return {
+    ...query,
     ideas: query.data || [],
-    isLoading: query.isLoading,
     createIdea: createIdeaMutation.mutateAsync,
     updateStatus: updateIdeaStatusMutation.mutateAsync,
     deleteIdea: deleteIdeaMutation.mutateAsync,
@@ -179,6 +181,7 @@ export function useIdeaComments(ideaId?: string) {
 
   return useQuery({
     queryKey: ['idea_comments', ideaId],
+    refetchOnMount: true,
     enabled: !!ideaId,
     queryFn: async () => {
       const { data, error } = await supabase

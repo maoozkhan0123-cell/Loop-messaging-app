@@ -30,6 +30,7 @@ export default function FilesPage() {
   const [search, setSearch] = useState('')
   const [uploadChannelId, setUploadChannelId] = useState('')
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [uploadBusy, setUploadBusy] = useState(false)
   const [workView, setWorkView] = useState<WorkView>('list')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const availableChannels = channels.filter((channel) => !channel.archived_at)
@@ -51,7 +52,7 @@ export default function FilesPage() {
     if (filter === 'documents' && !isDoc) return false
     if (filter === 'other' && (isImg || isDoc)) return false
     if (search.trim()) {
-      return f.file_name.toLowerCase().includes(search.toLowerCase())
+      return f.file_name.toLowerCase().includes(search.trim().toLowerCase())
     }
     return true
   })
@@ -70,12 +71,12 @@ export default function FilesPage() {
   counts.other = (files ?? []).length - counts.images - counts.documents
 
   return (
-    <div className="flex flex-1 min-w-0 flex-col h-full bg-white">
+      <div className="flex min-h-0 flex-1 min-w-0 flex-col h-full bg-white">
       {/* Header */}
       <div className="border-b border-[#DDE8F2] px-4 sm:px-6 pt-4 sm:pt-5 pb-0 flex-shrink-0 bg-[#F8FBFD]">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div><h1 className="text-[20px] sm:text-[22px] font-bold text-[#101828]">Files</h1><p className="mt-0.5 text-xs text-[#667085]">Browse and share files across your workspace.</p></div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <select value={uploadChannelId} onChange={(event) => setUploadChannelId(event.target.value)} className="h-9 min-w-0 max-w-52 rounded-lg border border-[#D6E2EC] bg-white px-2.5 text-xs text-[#344054] outline-none focus:border-[#289ED8]" aria-label="Upload destination">
               <option value="" disabled>Select destination…</option>
               {availableChannels.map((channel) => <option key={channel.id} value={channel.id}>{channelLabel(channel)}</option>)}
@@ -86,14 +87,14 @@ export default function FilesPage() {
         </div>
 
         {/* Filter tabs */}
-        <div className="flex items-center gap-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div className="grid grid-cols-2 items-center gap-x-2 sm:flex sm:flex-wrap sm:gap-0">
           {(['all', 'images', 'documents', 'other'] as FilterType[]).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setFilter(tab)}
               className={cn(
-                'flex items-center gap-1.5 h-9 px-3 sm:px-4 text-[13px] font-medium border-b-2 transition-all capitalize flex-shrink-0',
+                'flex items-center justify-center sm:justify-start gap-1.5 h-9 px-3 sm:px-4 text-[13px] font-medium border-b-2 transition-all capitalize min-w-0',
                 filter === tab
                   ? 'text-[#289ED8] border-[#289ED8]'
                   : 'text-[#6B7280] border-transparent hover:text-[#1D1C1D]'
@@ -115,17 +116,18 @@ export default function FilesPage() {
       </div>
 
       {/* Search bar */}
-      <div className="px-4 sm:px-6 py-3 border-b border-[#F3F4F6] flex-shrink-0 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] max-w-sm focus-within:border-[#3589FA] focus-within:bg-white transition-colors">
+      <div className="px-4 sm:px-6 py-3 border-b border-[#F3F4F6] flex-shrink-0 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 basis-44 items-center gap-2 h-9 px-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] max-w-sm focus-within:border-[#3589FA] focus-within:bg-white transition-colors">
           <Search size={14} className="text-[#9CA3AF] flex-shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search files…"
+            aria-label="Search files"
             className="flex-1 text-[13px] bg-transparent focus:outline-none text-[#111827] placeholder-[#9CA3AF] min-w-0"
           />
           {search && (
-            <button type="button" onClick={() => setSearch('')} className="text-[#9CA3AF] hover:text-[#6B7280]">
+            <button type="button" onClick={() => setSearch('')} aria-label="Clear file search" className="text-[#9CA3AF] hover:text-[#6B7280]">
               <X size={13} />
             </button>
           )}
@@ -176,7 +178,7 @@ export default function FilesPage() {
                   className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-[#E5E7EB] hover:bg-[#F9FAFB] transition-all group"
                 >
                   {/* Thumbnail / icon */}
-                  {isImg ? (
+                  {isImg && url ? (
                     <a href={url} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 hover:opacity-90 transition-opacity">
                       {/* Signed storage URLs are short-lived and should not be cached by an image optimizer. */}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -191,6 +193,7 @@ export default function FilesPage() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-[#111827] truncate">{file.file_name}</p>
+                    {!url && <span className="text-[11px] text-amber-700">File link unavailable</span>}
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-[#9CA3AF]">{formatFileSize(file.size_bytes)}</span>
                       <span className="text-[#D1D5DB] text-[11px]">·</span>
@@ -212,14 +215,14 @@ export default function FilesPage() {
                   </div>
 
                   {/* Download */}
-                  <a
+                  {url ? <a
                     href={url}
                     download={file.file_name}
                     className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-all flex-shrink-0"
                     title="Download"
                   >
                     <Download size={16} />
-                  </a>
+                  </a> : <button type="button" onClick={() => void refetch()} title="Retry file link" aria-label={`Retry link for ${file.file_name}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[#6B7280] hover:bg-[#EBF5FF]"><RefreshCw size={16} /></button>}
                   {file.channel_id && <button type="button" title="Open conversation" onClick={() => router.push(`${isDM ? '/dm' : '/channel'}/${file.channel_id}`)} className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#3589FA] hover:bg-[#EBF5FF] transition-all flex-shrink-0"><ExternalLink size={15} /></button>}
                 </div>
               )
@@ -229,9 +232,9 @@ export default function FilesPage() {
       )}
 
       {pendingFiles.length > 0 && selectedUploadChannel && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#101828]/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingFiles([]) }}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#101828]/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !uploadBusy) setPendingFiles([]) }}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-2 shadow-2xl">
-            <FileUpload channelId={selectedUploadChannel.id} destinationLabel={channelLabel(selectedUploadChannel)} files={pendingFiles} onClose={() => setPendingFiles([])} onComplete={() => { setPendingFiles([]); void refetch() }} />
+            <FileUpload channelId={selectedUploadChannel.id} destinationLabel={channelLabel(selectedUploadChannel)} files={pendingFiles} onClose={() => { if (!uploadBusy) setPendingFiles([]) }} onBusyChange={setUploadBusy} onComplete={() => { setPendingFiles([]); void refetch() }} />
           </div>
         </div>
       )}

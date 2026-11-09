@@ -45,7 +45,8 @@ export function useMyFiles() {
         ? await supabase.storage.from('attachments').createSignedUrls(rows.map((row) => row.object_key), 3600)
         : { data: [], error: null }
       if (signedError) throw new Error(`Files were found, but secure links could not be created: ${signedError.message}`)
-      const urlMap = new Map((signed ?? []).map((item: { path: string; signedUrl: string }) => [item.path, item.signedUrl]))
+      const signedUrls = (signed ?? []) as Array<{ error: string | null; path: string | null; signedUrl: string | null }>
+      const urlMap = new Map(signedUrls.filter(item => typeof item.signedUrl === 'string' && item.signedUrl).map(item => [item.path, item.signedUrl]))
 
       return rows.map((row) => ({
         ...row,
@@ -60,5 +61,8 @@ export function useMyFiles() {
       })) as MyFile[]
     },
     staleTime: 30_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: 45 * 60 * 1000,
   })
 }

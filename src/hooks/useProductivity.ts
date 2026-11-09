@@ -105,19 +105,19 @@ export function useWorkspaceEvents(userId?: string) {
   const qc = useQueryClient()
   const query = useQuery({
     queryKey: ['workspace-events', userId], enabled: !!userId,
+    refetchOnMount: true,
+    refetchInterval: 60_000,
     // The database returns only company-wide events and events the user organises or is invited to.
     queryFn: async () => {
       const { data, error } = await supabase.from('workspace_events').select('*').order('starts_at')
-      if (error) {
-        if (error.code === '42P01' || error.code === 'PGRST205') return [] as WorkspaceEvent[]
-        throw error
-      }
+      if (error) throw error
       const events = (data ?? []) as WorkspaceEvent[]
       if (!events.length) return events
       const [attendeesResult, creatorsResult] = await Promise.all([
         supabase.from('event_attendees').select('event_id,user_id,response').in('event_id', events.map((event) => event.id)),
         supabase.from('profiles').select('*').in('id', [...new Set(events.map((event) => event.created_by))]),
       ])
+      if (attendeesResult.error) throw attendeesResult.error
       const attendees = (attendeesResult.data ?? []) as Array<{ event_id: string; user_id: string; response: WorkspaceEvent['my_response'] }>
       const creators = new Map(((creatorsResult.data ?? []) as Profile[]).map((profile) => [profile.id, profile]))
       return events.map((event) => {
@@ -135,6 +135,16 @@ export function useWorkspaceEvents(userId?: string) {
   })
   const createEvent = useMutation({
     mutationFn: async ({ inviteeIds, ...input }: NewWorkspaceEvent) => {
+      if (!userId) throw new Error('Your session has expired. Please sign in again.')
+      if (!input.title.trim()) throw new Error('Enter an event title.')
+      const starts = Date.parse(input.starts_at)
+      const ends = Date.parse(input.ends_at)
+      if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) throw new Error('The end time must be after a valid start time.')
+      if (input.meeting_url) {
+        let validLink = false
+        try { validLink = ['https:', 'http:'].includes(new URL(input.meeting_url).protocol) } catch {}
+        if (!validLink) throw new Error('Meeting links must start with https:// or http://.')
+      }
       const { data, error } = await supabase.from('workspace_events').insert({ ...input, created_by: userId }).select().single()
       if (error) throw new Error(error.message)
       const event = data as WorkspaceEvent
@@ -142,7 +152,11 @@ export function useWorkspaceEvents(userId?: string) {
         ...[...new Set(inviteeIds)].filter((id) => id !== userId).map((id) => ({ event_id: event.id, user_id: id, response: 'pending' as const }))]
       const { error: inviteError } = await supabase.from('event_attendees').insert(rows)
       if (inviteError) {
-        await supabase.from('workspace_events').delete().eq('id', event.id)
+        const { error: cleanupError } = await supabase.from('workspace_events').delete().eq('id', event.id)
+        if (cleanupError) {
+          void qc.invalidateQueries({ queryKey: ['workspace-events'] })
+          throw new Error('The event was created, but guests could not be added. Remove the event before trying again.')
+        }
         throw new Error(inviteError.message)
       }
       return event
@@ -158,12 +172,14 @@ export function useWorkspaceEvents(userId?: string) {
   })
   const rsvp = useMutation({
     mutationFn: async ({ eventId, response }: { eventId: string; response: 'accepted' | 'declined' | 'maybe' }) => {
+      if (!userId) throw new Error('Your session has expired. Please sign in again.')
+      // Users may answer an invitation or join a company event they can view.
       const { error } = await supabase.from('event_attendees').upsert({ event_id: eventId, user_id: userId, response }, { onConflict: 'event_id,user_id' })
       if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace-events'] }),
   })
-  return { ...query, createEvent: createEvent.mutateAsync, isCreating: createEvent.isPending, deleteEvent: deleteEvent.mutateAsync, rsvp: rsvp.mutateAsync }
+  return { ...query, createEvent: createEvent.mutateAsync, isCreating: createEvent.isPending, deleteEvent: deleteEvent.mutateAsync, isDeleting: deleteEvent.isPending, rsvp: rsvp.mutateAsync, isRsvping: rsvp.isPending }
 }
 
 export function useScheduledMessages(userId?: string) {

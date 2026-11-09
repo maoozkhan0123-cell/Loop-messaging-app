@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toaster'
 import { ProfileDialog, TeamDirectory } from '@/components/team-directory/TeamDirectory'
 import type { DirectoryMember } from '@/components/team-directory/directory'
 import type { Profile } from '@/types/database'
+import { isWorkspaceAdmin } from '@/lib/auth/workspace'
 
 type WorkspaceRole = 'member' | 'admin' | 'ceo'
 type MemberAccess = { id: string; email?: string; role: WorkspaceRole; suspended: boolean; lastSignInAt?: string; createdAt: string; channelIds: string[] }
@@ -35,7 +36,7 @@ export default function PeoplePage() {
       return user
     },
   })
-  const isAdmin = currentUser?.app_metadata?.role === 'admin' || currentUser?.email === 'loop@bytechsol.com'
+  const isAdmin = isWorkspaceAdmin(currentUser?.app_metadata?.role, currentUser?.email)
 
   const profilesQuery = useQuery({
     queryKey: ['profiles'],

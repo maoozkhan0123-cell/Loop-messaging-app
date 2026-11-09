@@ -5,7 +5,11 @@
 create or replace function public.enforce_company_email()
 returns trigger language plpgsql set search_path = public, pg_temp as $$
 begin
-  if new.email is null or lower(new.email) not like '%@bytechsol.com' then
+  -- Keep unchanged legacy addresses usable during password/session updates.
+  if tg_op = 'UPDATE' and lower(new.email) is not distinct from lower(old.email) then
+    return new;
+  end if;
+  if new.email is null or new.email !~* '^[^[:space:]@]+@bytechsol[.]com$' then
     raise exception 'Only @bytechsol.com email addresses can join this workspace.'
       using errcode = 'check_violation';
   end if;

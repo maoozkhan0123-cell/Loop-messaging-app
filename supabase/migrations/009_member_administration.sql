@@ -16,6 +16,6 @@ alter table public.member_audit_logs enable row level security;
 drop policy if exists "Admins can view member audit logs" on public.member_audit_logs;
 create policy "Admins can view member audit logs"
   on public.member_audit_logs for select to authenticated
-  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') in ('admin', 'ceo'));
 
 -- Writes intentionally use the server-only service key; clients cannot alter audit history.

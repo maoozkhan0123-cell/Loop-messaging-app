@@ -3,12 +3,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types/database'
+import { isWorkspaceAdmin } from '@/lib/auth/workspace'
 
 export function roleDisplayName(role: unknown, profileName?: string | null, email?: string | null) {
-  const normalizedRole = String(role ?? '').toLowerCase()
+  if (profileName?.trim()) return profileName.trim()
+  const normalizedRole = String(role ?? '').trim().toLowerCase()
   if (normalizedRole === 'ceo') return 'CEO'
-  if (normalizedRole === 'admin' || email?.toLowerCase() === 'loop@bytechsol.com') return 'Admin'
-  return profileName?.trim() || 'Team member'
+  if (isWorkspaceAdmin(role, email)) return 'Admin'
+  return 'Team member'
 }
 
 /** Admins and the CEO; mirrors public.is_workspace_admin() in the database. */
@@ -22,7 +24,7 @@ export function useIsWorkspaceAdmin() {
       return user
     },
   })
-  return ['admin', 'ceo'].includes(String(user?.app_metadata?.role ?? '')) || user?.email === 'loop@bytechsol.com'
+  return isWorkspaceAdmin(user?.app_metadata?.role, user?.email)
 }
 
 export function useProfile() {
@@ -69,8 +71,14 @@ export function useUpdateProfile() {
       if (error) throw new Error(error.message)
       return data as Profile
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['profile'] }),
+        queryClient.invalidateQueries({ queryKey: ['profiles'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['project_tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['unified-inbox'] }),
+      ])
     },
   })
 }

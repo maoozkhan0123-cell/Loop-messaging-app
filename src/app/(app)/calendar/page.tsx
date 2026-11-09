@@ -29,12 +29,13 @@ const EMPTY_FORM = { title: '', description: '', starts: '', ends: '', location:
 export default function CalendarPage() {
   const { data: profile } = useProfile()
   const isAdmin = useIsWorkspaceAdmin()
-  const { data: events = [], createEvent, isCreating, deleteEvent, rsvp } = useWorkspaceEvents(profile?.id)
-  const { data: inbox = [] } = useUnifiedInbox(profile?.id)
+  const { data: events = [], isLoading: eventsLoading, isError: eventsFailed, refetch: retryEvents, createEvent, isCreating, deleteEvent, isDeleting, rsvp, isRsvping } = useWorkspaceEvents(profile?.id)
+  const { data: inbox = [], isError: deadlinesFailed, refetch: retryDeadlines } = useUnifiedInbox(profile?.id)
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [form, setForm] = useState(EMPTY_FORM)
+  const [actionError, setActionError] = useState('')
 
   const openForm = (day = new Date()) => {
     const start = new Date(day)
@@ -47,7 +48,7 @@ export default function CalendarPage() {
   }
 
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); if (!profile) return
+    event.preventDefault(); if (!profile || isCreating) return
     setError('')
     if (new Date(form.ends) <= new Date(form.starts)) { setError('The end time must be after the start time.'); return }
     try {
@@ -69,7 +70,7 @@ export default function CalendarPage() {
       ...events.flatMap((item) => eventOccurrences(item, from, to).map((at) => ({ id: `${item.id}-${at.toISOString()}`, title: item.title, at, kind: item.visibility }))),
       ...inbox.flatMap((entry) => {
         const due = entry.done ? null : parseCalendarDate(entry.task.due_date)
-        return due ? [{ id: `task-${entry.id}`, title: entry.task.title, at: due, kind: 'task' as const, href: '/inbox' }] : []
+        return due ? [{ id: `task-${entry.id}`, title: entry.task.title, at: due, kind: 'task' as const, href: entry.href }] : []
       }),
     ]
   }, [events, inbox, month])
@@ -89,16 +90,24 @@ export default function CalendarPage() {
 
   const remove = async (item: WorkspaceEvent) => {
     if (!(await confirmDialog({ title: `Delete “${item.title}”?`, description: 'It will be removed from everyone’s calendar.' }))) return
-    await deleteEvent(item.id)
+    setActionError('')
+    try { await deleteEvent(item.id) } catch { setActionError('The event could not be deleted. Please try again.') }
+  }
+  const answerInvitation = async (eventId: string, response: 'accepted' | 'declined' | 'maybe') => {
+    setActionError('')
+    try { await rsvp({ eventId, response }) } catch { setActionError('Your response could not be saved. Refresh the calendar and try again.') }
   }
 
-  return <main className="flex h-full min-w-0 flex-1 flex-col bg-[var(--content-bg)] text-[var(--text-primary)]">
+  return <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[var(--app-bg)] text-[var(--foreground)]">
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--ui-border)] px-6 py-5">
-      <div><h1 className="text-2xl font-bold">Calendar</h1><p className="mt-1 text-sm text-[var(--text-muted)]">Company events, your meetings and your task deadlines.</p></div>
-      <button onClick={() => openForm()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm font-bold text-white hover:bg-[var(--primary-hover)]"><Plus size={16}/> New event</button>
+      <div><h1 className="text-2xl font-bold">Calendar</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">Company events, your meetings and your task deadlines.</p></div>
+      <button type="button" disabled={!profile?.id} onClick={() => openForm()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm font-bold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"><Plus size={16}/> New event</button>
     </header>
     <section className="grid flex-1 gap-6 overflow-y-auto p-5 sm:p-8 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0">
+        {(eventsFailed || deadlinesFailed) && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><p>{eventsFailed ? 'Events could not be loaded.' : 'Your task deadlines could not be loaded.'}</p><button type="button" onClick={() => { if (eventsFailed) void retryEvents(); if (deadlinesFailed) void retryDeadlines(); }} className="mt-2 font-semibold underline">Retry calendar</button></div>}
+        {actionError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
+        {eventsLoading && <p role="status" className="mb-3 text-sm text-[var(--muted-foreground)]">Loading calendar…</p>}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-bold">{format(month, 'MMMM yyyy')}</h2>
           <div className="flex items-center gap-1">
@@ -108,7 +117,7 @@ export default function CalendarPage() {
           </div>
         </div>
         <MonthGrid month={month} items={items} onDay={openForm}/>
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-[var(--text-muted)]">
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-[var(--muted-foreground)]">
           <Legend kind="company" label="Company-wide" hint="holidays and events for everyone"/>
           <Legend kind="invite" label="Meetings" hint="only you and the people invited"/>
           <Legend kind="task" label="Your deadlines" hint="due dates of tasks assigned to you"/>
@@ -117,24 +126,24 @@ export default function CalendarPage() {
 
       <aside className="min-w-0 space-y-6">
         <div>
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Upcoming events</h2>
-          {upcomingEvents.length ? <div className="space-y-3">{upcomingEvents.map((item) => <EventCard key={item.id} item={item} meId={profile?.id} onRsvp={(response) => void rsvp({ eventId: item.id, response })} onDelete={() => void remove(item)}/>)}</div>
-            : <div className="rounded-2xl border border-dashed border-[var(--ui-border)] px-4 py-10 text-center"><CalendarDays className="mx-auto text-[var(--text-muted)]"/><h3 className="mt-3 font-bold">No upcoming events</h3><p className="mt-1 text-sm text-[var(--text-muted)]">Meetings you create or are invited to show here.</p></div>}
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Upcoming events</h2>
+          {upcomingEvents.length ? <div className="space-y-3">{upcomingEvents.map((item) => <EventCard key={item.id} item={item} meId={profile?.id} busy={isDeleting || isRsvping} onRsvp={(response) => void answerInvitation(item.id, response)} onDelete={() => void remove(item)}/>)}</div>
+            : !eventsFailed && !eventsLoading && <div className="rounded-2xl border border-dashed border-[var(--ui-border)] px-4 py-10 text-center"><CalendarDays className="mx-auto text-[var(--muted-foreground)]"/><h3 className="mt-3 font-bold">No upcoming events</h3><p className="mt-1 text-sm text-[var(--muted-foreground)]">Meetings you create or are invited to show here.</p></div>}
         </div>
         {upcomingDeadlines.length > 0 && <div>
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Your deadlines</h2>
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Your deadlines</h2>
           <div className="overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--surface)]">
-            {upcomingDeadlines.map(({ entry, due }) => <Link key={entry.id} href="/inbox" className="flex items-center gap-3 border-b border-[var(--ui-border)] px-4 py-3 last:border-b-0 hover:bg-[var(--surface-muted)]">
+            {upcomingDeadlines.map(({ entry, due }) => <Link key={entry.id} href={entry.href} className="flex items-center gap-3 border-b border-[var(--ui-border)] px-4 py-3 last:border-b-0 hover:bg-[var(--surface-muted)]">
               <Flag size={14} className="shrink-0 text-rose-600"/>
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{entry.task.title}</span>
-              <span className={cn('shrink-0 text-xs font-semibold', isToday(due) ? 'text-rose-600' : 'text-[var(--text-muted)]')}>{isToday(due) ? 'Today' : format(due, 'MMM d')}</span>
+              <span className={cn('shrink-0 text-xs font-semibold', isToday(due) ? 'text-rose-600' : 'text-[var(--muted-foreground)]')}>{isToday(due) ? 'Today' : format(due, 'MMM d')}</span>
             </Link>)}
           </div>
         </div>}
       </aside>
     </section>
 
-    {open && <EventForm form={form} setForm={setForm} isAdmin={isAdmin} meId={profile?.id} error={error} isCreating={isCreating} onSubmit={submit} onClose={() => setOpen(false)}/>}
+    {open && <EventForm form={form} setForm={setForm} isAdmin={isAdmin} meId={profile?.id} error={error} isCreating={isCreating} onSubmit={submit} onClose={() => { if (!isCreating) setOpen(false) }}/>}
   </main>
 }
 
@@ -143,11 +152,11 @@ const LEGEND_SWATCH: Record<CalendarItem['kind'], string> = { company: 'bg-amber
 function Legend({ kind, label, hint }: { kind: CalendarItem['kind']; label: string; hint: string }) {
   return <span className="flex items-center gap-1.5" title={hint}>
     {kind === 'task' ? <Flag size={12} className="text-rose-600"/> : <span className={cn('h-2.5 w-2.5 rounded-sm', LEGEND_SWATCH[kind])}/>}
-    <span><span className="font-medium text-[var(--text-secondary)]">{label}</span> <span className="hidden sm:inline">· {hint}</span></span>
+    <span><span className="font-medium text-[var(--muted-foreground)]">{label}</span> <span className="hidden sm:inline">· {hint}</span></span>
   </span>
 }
 
-function EventCard({ item, meId, onRsvp, onDelete }: { item: WorkspaceEvent; meId?: string; onRsvp: (response: 'accepted' | 'declined' | 'maybe') => void; onDelete: () => void }) {
+function EventCard({ item, meId, busy, onRsvp, onDelete }: { item: WorkspaceEvent; meId?: string; busy?: boolean; onRsvp: (response: 'accepted' | 'declined' | 'maybe') => void; onDelete: () => void }) {
   const mine = item.created_by === meId
   const company = item.visibility === 'company'
   return <article className="rounded-2xl border border-[var(--ui-border)] bg-[var(--surface)] p-4 shadow-sm">
@@ -159,20 +168,20 @@ function EventCard({ item, meId, onRsvp, onDelete }: { item: WorkspaceEvent; meI
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">
           <h3 className="min-w-0 flex-1 font-bold">{item.title}</h3>
-          {mine && <button type="button" aria-label="Delete event" onClick={onDelete} className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--text-muted)] hover:bg-red-50 hover:text-red-600"><Trash2 size={14}/></button>}
+          {mine && <button type="button" aria-label="Delete event" disabled={busy} onClick={onDelete} className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600 disabled:opacity-50"><Trash2 size={14}/></button>}
         </div>
-        <span className={cn('mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', company ? 'bg-amber-50 text-amber-800' : 'bg-[var(--surface-muted)] text-[var(--text-secondary)]')}>
+        <span className={cn('mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', company ? 'bg-amber-50 text-amber-800' : 'bg-[var(--surface-muted)] text-[var(--muted-foreground)]')}>
           {company ? <><Building2 size={11}/>Company-wide</> : <><Lock size={11}/>Private · {item.attendee_count ?? 1} {item.attendee_count === 1 ? 'person' : 'people'}</>}
         </span>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">
           <span className="flex items-center gap-1"><Clock size={12}/>{format(new Date(item.starts_at), 'p')}–{format(new Date(item.ends_at), 'p')}{item.recurrence !== 'none' && ` · repeats ${item.recurrence}`}</span>
           {item.location && <span className="flex items-center gap-1"><MapPin size={12}/>{item.location}</span>}
-          {item.meeting_url && <a className="flex items-center gap-1 text-[var(--primary)] hover:underline" href={item.meeting_url} target="_blank" rel="noreferrer"><Video size={12}/>Join meeting</a>}
+          {item.meeting_url && /^https?:\/\//i.test(item.meeting_url) && <a className="flex items-center gap-1 text-[var(--primary)] hover:underline" href={item.meeting_url} target="_blank" rel="noreferrer"><Video size={12}/>Join meeting</a>}
         </div>
-        {item.description && <p className="mt-2 text-sm text-[var(--text-secondary)]">{item.description}</p>}
-        <p className="mt-2 text-xs text-[var(--text-muted)]">{mine ? 'You organised this' : `Organised by ${item.creator?.display_name ?? 'a teammate'}`}</p>
-        {!mine && <div className="mt-3 flex gap-2">
-          {(['accepted', 'maybe', 'declined'] as const).map((response) => <button key={response} type="button" onClick={() => onRsvp(response)} aria-pressed={item.my_response === response}
+        {item.description && <p className="mt-2 text-sm text-[var(--muted-foreground)]">{item.description}</p>}
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]">{mine ? 'You organised this' : `Organised by ${item.creator?.display_name ?? 'a teammate'}`}</p>
+        {!mine && meId && <div className="mt-3 flex flex-wrap gap-2">
+          {(['accepted', 'maybe', 'declined'] as const).map((response) => <button key={response} type="button" disabled={busy} onClick={() => onRsvp(response)} aria-pressed={item.my_response === response}
             className={cn('flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold capitalize', item.my_response === response ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]' : 'border-[var(--ui-border)] hover:border-[var(--primary)]')}>
             {item.my_response === response && <Check size={12}/>}{response === 'accepted' ? 'Going' : response === 'declined' ? 'Not going' : 'Maybe'}
           </button>)}
@@ -194,8 +203,8 @@ function EventForm({ form, setForm, isAdmin, meId, error, isCreating, onSubmit, 
   const field = 'mt-1.5 h-10 w-full rounded-lg border border-[var(--ui-border)] bg-transparent px-3 font-normal outline-none focus:border-[var(--primary)]'
 
   return <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-    <form onSubmit={onSubmit} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 shadow-2xl">
-      <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold">New event</h2><button type="button" aria-label="Close" onClick={onClose} className="rounded-lg p-2 hover:bg-[var(--surface-muted)]"><X size={18}/></button></div>
+    <form role="dialog" aria-modal="true" aria-labelledby="new-event-heading" onSubmit={onSubmit} className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 shadow-2xl">
+      <div className="mb-5 flex items-center justify-between"><h2 id="new-event-heading" className="text-xl font-bold">New event</h2><button type="button" aria-label="Close event form" disabled={isCreating} onClick={onClose} className="rounded-lg p-2 hover:bg-[var(--surface-muted)]"><X size={18}/></button></div>
       <div className="space-y-4">
         <label className="block text-sm font-semibold">Title<input required maxLength={160} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field}/></label>
 
@@ -213,10 +222,10 @@ function EventForm({ form, setForm, isAdmin, meId, error, isCreating, onSubmit, 
             <Avatar src={person.avatar_url} name={person.display_name} size={20}/>{person.display_name}
             <button type="button" aria-label={`Remove ${person.display_name}`} onClick={() => setForm({ ...form, inviteeIds: form.inviteeIds.filter((id) => id !== person.id) })}><X size={12}/></button>
           </span>)}</div>}
-          <label className="mt-2 flex h-9 items-center gap-2 rounded-lg border border-[var(--ui-border)] px-3 focus-within:border-[var(--primary)]"><Search size={14} className="text-[var(--text-muted)]"/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search teammates" className="min-w-0 flex-1 bg-transparent text-sm outline-none"/></label>
+          <label className="mt-2 flex h-9 items-center gap-2 rounded-lg border border-[var(--ui-border)] px-3 focus-within:border-[var(--primary)]"><Search size={14} className="text-[var(--muted-foreground)]"/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search teammates" className="min-w-0 flex-1 bg-transparent text-sm outline-none"/></label>
           <div className="mt-1 max-h-36 overflow-y-auto">{matches.length ? matches.map((person) => <button key={person.id} type="button" onClick={() => { setForm({ ...form, inviteeIds: [...form.inviteeIds, person.id] }); setQuery('') }} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-muted)]">
-            <Avatar src={person.avatar_url} name={person.display_name} size={26}/><span className="min-w-0 flex-1 truncate">{person.display_name}</span><Plus size={14} className="text-[var(--text-muted)]"/>
-          </button>) : <p className="px-2 py-2 text-xs text-[var(--text-muted)]">{query ? 'No one matches.' : 'Everyone is invited.'}</p>}</div>
+            <Avatar src={person.avatar_url} name={person.display_name} size={26}/><span className="min-w-0 flex-1 truncate">{person.display_name}</span><Plus size={14} className="text-[var(--muted-foreground)]"/>
+          </button>) : <p className="px-2 py-2 text-xs text-[var(--muted-foreground)]">{query ? 'No one matches.' : 'Everyone is invited.'}</p>}</div>
         </div>}
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -239,8 +248,8 @@ function EventForm({ form, setForm, isAdmin, meId, error, isCreating, onSubmit, 
 function VisibilityOption({ active, disabled, onClick, icon, title, hint }: { active: boolean; disabled?: boolean; onClick: () => void; icon: React.ReactNode; title: string; hint: string }) {
   return <button type="button" disabled={disabled} onClick={onClick} aria-pressed={active}
     className={cn('flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50', active ? 'border-[var(--primary)] bg-[var(--primary-soft)]' : 'border-[var(--ui-border)] hover:border-[var(--primary)]')}>
-    <span className={cn('mt-0.5', active ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]')}>{icon}</span>
-    <span><span className="block text-sm font-semibold">{title}</span><span className="block text-xs font-normal text-[var(--text-muted)]">{hint}</span></span>
+    <span className={cn('mt-0.5', active ? 'text-[var(--primary)]' : 'text-[var(--muted-foreground)]')}>{icon}</span>
+    <span><span className="block text-sm font-semibold">{title}</span><span className="block text-xs font-normal text-[var(--muted-foreground)]">{hint}</span></span>
   </button>
 }
 
@@ -250,11 +259,11 @@ function MonthGrid({ month, items, onDay }: { month: Date; items: CalendarItem[]
   const days: Date[] = []
   for (let day = first; day <= last; day = addDays(day, 1)) days.push(day)
   return <div className="overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--surface)] shadow-sm">
-    <div className="grid grid-cols-7 border-b border-[var(--ui-border)]">{days.slice(0, 7).map((day) => <div key={day.toISOString()} className="px-2 py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{format(day, 'EEE')}</div>)}</div>
+    <div className="grid grid-cols-7 border-b border-[var(--ui-border)]">{days.slice(0, 7).map((day) => <div key={day.toISOString()} className="px-2 py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">{format(day, 'EEE')}</div>)}</div>
     <div className="grid grid-cols-7">{days.map((day) => {
       const dayItems = items.filter((item) => isSameDay(item.at, day)).sort((a, b) => a.at.getTime() - b.at.getTime())
       return <div key={day.toISOString()} role="button" tabIndex={0} onClick={() => onDay(day)} onKeyDown={(e) => { if (e.key === 'Enter') onDay(day) }} title={`New event on ${format(day, 'MMMM d')}`}
-        className={cn('flex min-h-[72px] cursor-pointer flex-col items-stretch gap-1 border-b border-r border-[var(--ui-border)] p-1.5 text-left transition-colors hover:bg-[var(--surface-muted)] sm:min-h-[104px] [&:nth-child(7n)]:border-r-0', !isSameMonth(day, month) && 'bg-[var(--surface-muted)]/50 text-[var(--text-muted)]')}>
+        className={cn('flex min-h-[72px] cursor-pointer flex-col items-stretch gap-1 border-b border-r border-[var(--ui-border)] p-1.5 text-left transition-colors hover:bg-[var(--surface-muted)] sm:min-h-[104px] [&:nth-child(7n)]:border-r-0', !isSameMonth(day, month) && 'bg-[var(--surface-muted)]/50 text-[var(--muted-foreground)]')}>
         <span className={cn('grid h-7 w-7 place-items-center rounded-full text-xs font-semibold', isToday(day) && 'bg-[var(--primary)] text-white')}>{format(day, 'd')}</span>
         {dayItems.slice(0, 3).map((item) => {
           const label = <>{item.kind === 'task' ? <Flag size={10} className="mr-1 inline"/> : item.kind === 'invite' ? `${format(item.at, 'p')} ` : ''}{item.title}</>
@@ -262,7 +271,7 @@ function MonthGrid({ month, items, onDay }: { month: Date; items: CalendarItem[]
             ? <Link key={item.id} href={item.href} onClick={(e) => e.stopPropagation()} className={cn('truncate rounded-md px-1.5 py-0.5 text-[11px] font-semibold hover:opacity-80', KIND_STYLE[item.kind])}>{label}</Link>
             : <span key={item.id} className={cn('truncate rounded-md px-1.5 py-0.5 text-[11px] font-semibold', KIND_STYLE[item.kind])}>{label}</span>
         })}
-        {dayItems.length > 3 && <span className="px-1.5 text-[11px] text-[var(--text-muted)]">+{dayItems.length - 3} more</span>}
+        {dayItems.length > 3 && <span className="px-1.5 text-[11px] text-[var(--muted-foreground)]">+{dayItems.length - 3} more</span>}
       </div>
     })}</div>
   </div>

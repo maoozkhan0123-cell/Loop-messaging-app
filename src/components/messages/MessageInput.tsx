@@ -9,13 +9,13 @@ import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
 import { useTypingIndicator } from '@/hooks/useTypingIndicator'
 import { useProfile } from '@/hooks/useProfile'
 import { createClient } from '@/lib/supabase/client'
-import { useQuery, useQueryClient, InfiniteData } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAllProfiles } from '@/hooks/useProfiles'
 import type { Message } from '@/types/database'
 import { cn, formatFileSize, isImageMime } from '@/lib/utils'
 import { usePreferences } from '@/hooks/usePreferences'
-import { bumpThreadReplyCount } from '@/hooks/useMessages'
+import { appendMessage, bumpThreadReplyCount } from '@/hooks/useMessages'
 import { htmlToMarkdown, markdownToHtml } from '@/lib/richText'
 
 // About 8 lines of 14px text before the box starts scrolling.
@@ -251,16 +251,8 @@ export function MessageInput({ channelId, parentId, placeholder }: MessageInputP
         attachments: [],
         reply_count: 0,
       }
-      queryClient.setQueryData<InfiniteData<Message[]>>(
-        ['messages', channelId, parentId ?? null],
-        (old) => {
-          if (!old) return old
-          const next = [...old.pages]
-          next[next.length - 1] = [...(next[next.length - 1] ?? []), optimisticMsg]
-          return { ...old, pages: next }
-        }
-      )
-      if (parentId) bumpThreadReplyCount(queryClient, channelId, parentId)
+      appendMessage(queryClient, channelId, parentId ?? null, optimisticMsg)
+      if (parentId) bumpThreadReplyCount(queryClient, channelId, parentId, optimisticMsg.id)
 
       // Step 3: Insert attachment records.
       // Files were already uploaded to Supabase Storage when attached (pre-upload).

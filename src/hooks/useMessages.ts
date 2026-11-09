@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQueryClient, InfiniteData } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import type { Message, Reaction, Attachment, Profile } from '@/types/database'
 
 
@@ -17,7 +17,7 @@ type MsgCache = InfiniteData<Message[]>
 
 export function patchCache(
   qc: ReturnType<typeof useQueryClient>,
-  key: unknown[],
+  key: readonly unknown[],
   fn: (pages: Message[][]) => Message[][]
 ) {
   qc.setQueryData<MsgCache>(key, (old) => {
@@ -27,6 +27,10 @@ export function patchCache(
   })
 }
 
+function patchChannelMessages(qc: ReturnType<typeof useQueryClient>, channelId: string, fn: (pages: Message[][]) => Message[][]) {
+  for (const [key] of qc.getQueriesData<MsgCache>({ queryKey: ['messages', channelId] })) patchCache(qc, key, fn)
+}
+
 // O(n) append — never re-fetches all pages
 export function appendMessage(qc: ReturnType<typeof useQueryClient>, channelId: string, parentId: string | null, msg: Message) {
   const key = ['messages', channelId, parentId]
@@ -34,14 +38,25 @@ export function appendMessage(qc: ReturnType<typeof useQueryClient>, channelId: 
     const allIds = new Set(pages.flatMap((p) => p.map((m) => m.id)))
     if (allIds.has(msg.id)) return pages // dedup
     const next = [...pages]
-    next[next.length - 1] = [...(next[next.length - 1] ?? []), msg]
+    // Infinite queries store the latest page first; older pages follow it.
+    next[0] = [...(next[0] ?? []), msg]
     return next
   })
 }
 
 // Update the root message summary when a thread reply arrives. A reply must never
 // be inserted into the root conversation feed as if it were a top-level message.
-export function bumpThreadReplyCount(qc: ReturnType<typeof useQueryClient>, channelId: string, rootMessageId: string) {
+const countedReplies = new WeakMap<ReturnType<typeof useQueryClient>, Set<string>>()
+
+export function bumpThreadReplyCount(qc: ReturnType<typeof useQueryClient>, channelId: string, rootMessageId: string, replyId?: string) {
+  // The sender's RPC response and realtime event can arrive in either order.
+  if (replyId) {
+    const seen = countedReplies.get(qc) ?? new Set<string>()
+    if (seen.has(replyId)) return
+    seen.add(replyId)
+    if (seen.size > 2000) seen.delete(seen.values().next().value!)
+    countedReplies.set(qc, seen)
+  }
   patchCache(qc, ['messages', channelId, null], (pages) =>
     pages.map((page) => page.map((message) => message.id === rootMessageId
       ? { ...message, reply_count: (message.reply_count ?? 0) + 1 }
@@ -51,9 +66,8 @@ export function bumpThreadReplyCount(qc: ReturnType<typeof useQueryClient>, chan
 }
 
 // O(n) update — called on edit/delete
-function updateMessage(qc: ReturnType<typeof useQueryClient>, channelId: string, parentId: string | null, updatedMsg: Message) {
-  const key = ['messages', channelId, parentId]
-  patchCache(qc, key, (pages) =>
+export function updateMessage(qc: ReturnType<typeof useQueryClient>, channelId: string, updatedMsg: Partial<Message> & Pick<Message, 'id'>) {
+  patchChannelMessages(qc, channelId, (pages) =>
     pages.map((page) =>
       page.map((m) => (m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m))
     )
@@ -61,15 +75,13 @@ function updateMessage(qc: ReturnType<typeof useQueryClient>, channelId: string,
 }
 
 // O(n) reaction toggle — no DB call needed, realtime payload has the full row
-function applyReaction(
+export function applyReaction(
   qc: ReturnType<typeof useQueryClient>,
   channelId: string,
   reaction: { message_id: string; user_id: string; emoji: string },
   eventType: string
 ) {
-  for (const parentId of [null, undefined]) {
-    const key = ['messages', channelId, parentId ?? null]
-    patchCache(qc, key, (pages) =>
+    patchChannelMessages(qc, channelId, (pages) =>
       pages.map((page) =>
         page.map((m) => {
           if (m.id !== reaction.message_id) return m
@@ -84,17 +96,15 @@ function applyReaction(
         })
       )
     )
-  }
 }
 
 // O(n) attachment append — called when uploader inserts attachment record
-function appendAttachment(
+export function appendAttachment(
   qc: ReturnType<typeof useQueryClient>,
   channelId: string,
   attachment: { message_id: string; id: string; [key: string]: unknown }
 ) {
-  const key = ['messages', channelId, null]
-  patchCache(qc, key, (pages) =>
+  patchChannelMessages(qc, channelId, (pages) =>
     pages.map((page) =>
       page.map((m) => {
         if (m.id !== attachment.message_id) return m
@@ -121,10 +131,7 @@ export async function fetchProfile(supabase: ReturnType<typeof createClient>, us
 export function useMessages(channelId: string, parentId?: string, currentUserId?: string) {
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const queryClientRef = useRef(queryClient)
-  queryClientRef.current = queryClient
-  const currentUserIdRef = useRef(currentUserId)
-  currentUserIdRef.current = currentUserId
+  void currentUserId
 
   const query = useInfiniteQuery({
     queryKey: ['messages', channelId, parentId ?? null],
@@ -174,12 +181,11 @@ export function useMessages(channelId: string, parentId?: string, currentUserId?
       if (firstPage.length < PAGE_SIZE) return undefined
       return firstPage[0]?.created_at ?? undefined
     },
-    staleTime: Infinity, // Cache is authoritative — realtime keeps it fresh
-    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   })
 
   useEffect(() => {
-    const qc = queryClientRef.current
+    const qc = queryClient
 
     const channel = supabase
       .channel(`messages:${channelId}:${parentId ?? 'root'}`)
@@ -191,8 +197,8 @@ export function useMessages(channelId: string, parentId?: string, currentUserId?
         (payload: Record<string, unknown>) => {
           const row = payload.new as Message | undefined
           if (!row) return
-          const pid = row.parent_id ?? null
-          updateMessage(qc, channelId, pid, row)
+          updateMessage(qc, channelId, row)
+          if (row.parent_id && row.deleted_at) void qc.invalidateQueries({ queryKey: ['messages', channelId, null], exact: true })
         }
       )
       .on(
@@ -200,7 +206,7 @@ export function useMessages(channelId: string, parentId?: string, currentUserId?
         { event: '*', schema: 'public', table: 'reactions' },
         (payload: Record<string, unknown>) => {
           const eventType = payload.eventType as string
-          const row = (payload.new ?? payload.old) as { message_id: string; user_id: string; emoji: string } | undefined
+          const row = (eventType === 'DELETE' ? payload.old : payload.new) as { message_id: string; user_id: string; emoji: string } | undefined
           if (!row) return
           applyReaction(qc, channelId, row, eventType)
         }
@@ -214,11 +220,13 @@ export function useMessages(channelId: string, parentId?: string, currentUserId?
         }
       )
       .subscribe((status: string) => {
-        if (status === 'CHANNEL_ERROR') setTimeout(() => channel.subscribe(), 2000)
+        // Rejoining must fill any gap while realtime was disconnected, even if
+        // the user kept this tab focused. Supabase manages channel retries.
+        if (status === 'SUBSCRIBED') void qc.invalidateQueries({ queryKey: ['messages', channelId, parentId ?? null], exact: true })
       })
 
     return () => { supabase.removeChannel(channel) }
-  }, [channelId, parentId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [channelId, parentId, queryClient, supabase])
 
   return query
 }
@@ -252,12 +260,7 @@ export function useEditMessage() {
     },
     onSuccess: (_, vars) => {
       // Optimistic: update body in cache immediately
-      const qc = queryClient
-      patchCache(qc, ['messages', vars.channelId, null], (pages) =>
-        pages.map((page) =>
-          page.map((m) => m.id === vars.messageId ? { ...m, body: vars.body, edited_at: new Date().toISOString() } : m)
-        )
-      )
+      updateMessage(queryClient, vars.channelId, { id: vars.messageId, body: vars.body, edited_at: new Date().toISOString() })
     },
   })
 }
@@ -272,11 +275,8 @@ export function useDeleteMessage() {
     },
     onSuccess: (_, vars) => {
       // Optimistic: mark deleted in cache immediately
-      patchCache(queryClient, ['messages', vars.channelId, null], (pages) =>
-        pages.map((page) =>
-          page.map((m) => m.id === vars.messageId ? { ...m, deleted_at: new Date().toISOString() } : m)
-        )
-      )
+      updateMessage(queryClient, vars.channelId, { id: vars.messageId, deleted_at: new Date().toISOString() })
+      void queryClient.invalidateQueries({ queryKey: ['messages', vars.channelId, null], exact: true })
     },
   })
 }

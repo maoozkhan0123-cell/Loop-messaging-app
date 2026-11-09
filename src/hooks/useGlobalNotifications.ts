@@ -54,9 +54,9 @@ export function useGlobalNotifications(
           const isOwnMessage = row.user_id === currentUserIdRef.current
 
           // ── 1. Update message cache immediately ────────────────────────────
-          // Only update cache for others' messages — own messages are optimistically
-          // inserted by MessageInput immediately after the send_message RPC returns.
-          if (!isOwnMessage) {
+          // Own messages may originate in another tab or device. The shared
+          // append helper deduplicates against the composer's immediate insert.
+          {
             const pid = row.parent_id ?? null
             const cachedProfile = row.user_id ? profileCache.get(row.user_id) : undefined
             const fullMsg: Message = {
@@ -68,7 +68,7 @@ export function useGlobalNotifications(
             }
 
             appendMessage(qc, row.channel_id, pid, fullMsg)
-            if (pid) bumpThreadReplyCount(qc, row.channel_id, pid)
+            if (pid) bumpThreadReplyCount(qc, row.channel_id, pid, row.id)
 
             // Patch profile in asynchronously if it wasn't in cache yet
             if (row.user_id && !cachedProfile) {

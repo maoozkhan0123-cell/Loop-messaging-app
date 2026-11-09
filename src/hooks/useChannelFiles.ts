@@ -15,6 +15,7 @@ export function useChannelFiles(channelId: string) {
 
   return useQuery({
     queryKey: ['channel-files', channelId],
+    enabled: Boolean(channelId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('attachments')
@@ -25,10 +26,12 @@ export function useChannelFiles(channelId: string) {
 
       if (error) throw new Error(error.message)
       const rows = (data ?? []) as Array<Attachment & { messages?: { user_id: string | null; created_at: string } }>
-      const { data: signed } = rows.length
+      const { data: signed, error: signedError } = rows.length
         ? await supabase.storage.from('attachments').createSignedUrls(rows.map((row) => row.object_key), 3600)
-        : { data: [] }
-      const urlMap = new Map((signed ?? []).map((item: { path: string; signedUrl: string }) => [item.path, item.signedUrl]))
+        : { data: [], error: null }
+      if (signedError) throw new Error(`Secure file links could not be created: ${signedError.message}`)
+      const signedUrls = (signed ?? []) as Array<{ error: string | null; path: string | null; signedUrl: string | null }>
+      const urlMap = new Map(signedUrls.filter(item => typeof item.signedUrl === 'string' && item.signedUrl).map(item => [item.path, item.signedUrl]))
 
       return rows.map((row) => ({
         ...row,
@@ -39,5 +42,8 @@ export function useChannelFiles(channelId: string) {
       })) as ChannelFile[]
     },
     staleTime: 30_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: 45 * 60 * 1000,
   })
 }

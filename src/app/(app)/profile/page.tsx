@@ -8,6 +8,8 @@ import { Avatar } from '@/components/ui/Avatar'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useToast } from '@/components/ui/Toaster'
+import { usePreferences } from '@/hooks/usePreferences'
+import { resolvePresenceStatus } from '@/lib/presence'
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -16,6 +18,7 @@ export default function ProfilePage() {
   const updateProfile = useUpdateProfile()
   const notifications = useNotifications()
   const { toast } = useToast()
+  const { preferences, hydrated, setPreference } = usePreferences()
 
   const [displayName, setDisplayName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
@@ -26,19 +29,31 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const initializedProfileId = useRef<string | null>(null)
 
   // Populate form from loaded profile
   useEffect(() => {
-    if (profile) {
+    if (profile && hydrated && initializedProfileId.current !== profile.id) {
+      initializedProfileId.current = profile.id
       setDisplayName(profile.display_name ?? '')
       setJobTitle(profile.job_title ?? '')
-      setStatus((profile.status as 'online' | 'away' | 'offline') ?? 'online')
+      setStatus(preferences.availability)
     }
-  }, [profile])
+  }, [profile, hydrated, preferences.availability])
+
+  useEffect(() => {
+    if (hydrated) setStatus(preferences.availability)
+  }, [hydrated, preferences.availability])
+
+  useEffect(() => {
+    if (!avatarPreview) return
+    return () => URL.revokeObjectURL(avatarPreview)
+  }, [avatarPreview])
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) { setError('Choose a PNG, JPEG, GIF, or WebP image'); return }
     if (file.size > 5 * 1024 * 1024) { setError('Avatar must be under 5 MB'); return }
     setAvatarFile(file)
     setAvatarPreview(URL.createObjectURL(file))
@@ -69,10 +84,11 @@ export default function ProfilePage() {
 
       await updateProfile.mutateAsync({
         display_name: displayName.trim(),
-        job_title: jobTitle.trim() || undefined,
-        status,
+        job_title: jobTitle.trim() || null,
+        status: resolvePresenceStatus(status, preferences.onlineStatus, document.hidden),
         ...(avatar_url !== profile?.avatar_url ? { avatar_url } : {}),
       })
+      setPreference('availability', status)
 
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)

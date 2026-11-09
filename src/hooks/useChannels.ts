@@ -26,7 +26,8 @@ export function useChannels() {
         .select('*, channels(*)')
         .eq('user_id', user.id)
 
-      if (error || !memberships) return []
+      if (error) throw new Error(error.message)
+      if (!memberships) return []
 
       const typed = memberships as unknown as MembershipRow[]
 

@@ -12,6 +12,7 @@ interface FileUploadProps {
   files: File[]
   onClose: () => void
   onComplete: () => void
+  onBusyChange?: (busy: boolean) => void
 }
 
 interface UploadState {
@@ -21,7 +22,7 @@ interface UploadState {
   error?: string
 }
 
-export function FileUpload({ channelId, destinationLabel, files, onClose, onComplete }: FileUploadProps) {
+export function FileUpload({ channelId, destinationLabel, files, onClose, onComplete, onBusyChange }: FileUploadProps) {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const [uploads, setUploads] = useState<UploadState[]>(
@@ -34,6 +35,7 @@ export function FileUpload({ channelId, destinationLabel, files, onClose, onComp
 
   const handleUpload = async () => {
     setIsSubmitting(true)
+    onBusyChange?.(true)
     setSubmitError(null)
 
     try {
@@ -109,11 +111,15 @@ export function FileUpload({ channelId, destinationLabel, files, onClose, onComp
 
       // Avoid leaving a blank message behind when every file failed.
       if (successfulUploads === 0) {
-        await supabase.rpc('delete_message', { p_message_id: messageId })
+        const { error: cleanupError } = await supabase.rpc('delete_message', { p_message_id: messageId })
+        void queryClient.invalidateQueries({ queryKey: ['messages', channelId] })
+        if (cleanupError) throw new Error('No files were uploaded, but the empty message could not be removed. Remove it from the conversation before retrying.')
         throw new Error('No files were uploaded. Nothing was posted to the conversation.')
       }
 
       queryClient.invalidateQueries({ queryKey: ['messages', channelId] })
+      queryClient.invalidateQueries({ queryKey: ['my-files'] })
+      queryClient.invalidateQueries({ queryKey: ['channel-files', channelId] })
       if (failedUploads > 0) {
         setSubmitError(`${successfulUploads} file${successfulUploads === 1 ? '' : 's'} uploaded, but ${failedUploads} failed. Close this window and try the failed files again.`)
         setPartialComplete(true)
@@ -124,6 +130,7 @@ export function FileUpload({ channelId, destinationLabel, files, onClose, onComp
       setSubmitError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setIsSubmitting(false)
+      onBusyChange?.(false)
     }
   }
 
@@ -134,7 +141,7 @@ export function FileUpload({ channelId, destinationLabel, files, onClose, onComp
         <span className="text-sm font-medium text-[#111827]">
           Upload {files.length} file{files.length !== 1 ? 's' : ''}
         </span>
-        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-[#F3F4F6] text-[#6B7280]">
+        <button type="button" onClick={onClose} disabled={isSubmitting} aria-label="Close upload" className="p-1 rounded hover:bg-[#F3F4F6] text-[#6B7280] disabled:opacity-50">
           <X size={14} />
         </button>
       </div>
@@ -186,6 +193,7 @@ export function FileUpload({ channelId, destinationLabel, files, onClose, onComp
         <button
           type="button"
           onClick={partialComplete ? onComplete : onClose}
+          disabled={isSubmitting}
           className="px-3 h-7 text-xs border border-[#E5E7EB] rounded text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
         >
           {partialComplete ? 'Done' : 'Cancel'}

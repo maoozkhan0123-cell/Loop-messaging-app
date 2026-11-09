@@ -1,7 +1,7 @@
 'use client'
 
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
-import { useState, useMemo, useEffect, createContext, useContext } from 'react'
+import { useState, useMemo, useEffect, useRef, createContext, useContext } from 'react'
 import { usePathname } from 'next/navigation'
 import { IconRail } from '@/components/sidebar/IconRail'
 import { Sidebar } from '@/components/sidebar/Sidebar'
@@ -13,6 +13,9 @@ import { useGlobalNotifications } from '@/hooks/useGlobalNotifications'
 import { X } from 'lucide-react'
 import { AssistantPanel } from '@/components/ai/AssistantPanel'
 import { createClient } from '@/lib/supabase/client'
+import * as Dialog from '@radix-ui/react-dialog'
+import { usePreferences } from '@/hooks/usePreferences'
+import { resolvePresenceStatus } from '@/lib/presence'
 
 interface MobileNavContextType {
   mobileMenuOpen: boolean
@@ -35,12 +38,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isMessagingRoute = pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/')
   const [sidebarOpen, setSidebarOpen] = useState(isMessagingRoute)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuOpener = useRef<HTMLElement | null>(null)
   const { data: myProfile } = useProfile()
   const { data: channels } = useChannels()
+  const { preferences, hydrated } = usePreferences()
 
   // Keep the directory status in sync with this browser session.
   useEffect(() => {
-    if (!myProfile?.id) return
+    if (!myProfile?.id || !hydrated) return
     const supabase = createClient()
     const setStatus = (status: 'online' | 'away' | 'offline') => {
       void supabase.from('profiles').update({ status }).eq('id', myProfile.id)
@@ -61,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ status: 'offline' }),
       }).catch(() => undefined)
     }
-    const current = () => (document.hidden ? 'away' : 'online')
+    const current = () => resolvePresenceStatus(preferences.availability, preferences.onlineStatus, document.hidden)
     const handleVisibility = () => setStatus(current())
     const handlePageHide = () => sendOfflineOnExit()
     // Re-assert presence regularly so a status overwritten elsewhere (another tab closing) corrects itself.
@@ -76,7 +81,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pagehide', handlePageHide)
       setStatus('offline')
     }
-  }, [myProfile?.id])
+  }, [myProfile?.id, hydrated, preferences.availability, preferences.onlineStatus])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const closeOnDesktop = () => { if (desktop.matches) setMobileMenuOpen(false) }
+    closeOnDesktop()
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [mobileMenuOpen])
 
   // Auto-close mobile navigation drawer on route change
   useEffect(() => {
@@ -131,11 +145,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Mobile view: slide-over navigation drawer with backdrop */}
-          <AnimatePresence>
-            {mobileMenuOpen && (
-              <>
+          <Dialog.Root open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <Dialog.Portal>
                 {/* Overlay backdrop */}
-                <motion.div
+                <Dialog.Overlay asChild><motion.div
                   key="mobile-backdrop"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -143,24 +156,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   transition={{ duration: 0.2 }}
                   onClick={closeMobileMenu}
                   className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden"
-                />
+                /></Dialog.Overlay>
 
                 {/* Mobile Drawer */}
-                <motion.div
+                <Dialog.Content asChild onOpenAutoFocus={() => { mobileMenuOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }} onCloseAutoFocus={(event) => { event.preventDefault(); if (mobileMenuOpener.current?.isConnected) mobileMenuOpener.current.focus() }}><motion.div
                   key="mobile-drawer"
                   initial={{ x: '-100%' }}
                   animate={{ x: 0 }}
                   exit={{ x: '-100%' }}
                   transition={{ type: 'spring', damping: 25, stiffness: 280 }}
-                  className="fixed top-0 left-0 bottom-0 z-50 flex shadow-2xl md:hidden max-w-[85vw]"
+                  className="fixed top-0 left-0 bottom-0 z-50 flex w-max max-w-[calc(100vw-1rem)] shadow-2xl outline-none md:hidden"
                 >
-                  <div className="flex h-full">
+                  <Dialog.Title className="sr-only">Workspace navigation</Dialog.Title>
+                  <Dialog.Description className="sr-only">Navigate between pages, channels and conversations.</Dialog.Description>
+                  <div className="flex h-full min-w-0">
                     <IconRail
                       compact
                       onOpenSidebar={() => {}}
                       onCloseSidebar={closeMobileMenu}
                     />
-                    <div className="h-full relative">
+                    <div className="relative h-full min-w-0 flex-1">
                       <Sidebar />
                       {/* Close button inside mobile menu */}
                       <button
@@ -168,15 +183,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         onClick={closeMobileMenu}
                         className="absolute top-3 right-3 p-1 rounded-full bg-white/10 text-white/70 hover:text-white hover:bg-white/20 transition-colors z-30"
                         title="Close menu"
+                        aria-label="Close menu"
                       >
                         <X size={16} />
                       </button>
                     </div>
                   </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+                </motion.div></Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
 
           {/* Main content area */}
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden md:rounded-tl-2xl" style={{ background: 'var(--app-bg)' }}>

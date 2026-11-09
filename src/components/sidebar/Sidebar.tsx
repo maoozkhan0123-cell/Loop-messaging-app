@@ -20,11 +20,12 @@ export function Sidebar() {
   const router = useRouter()
   const pathname = usePathname()
 
-  const { data: channels, isLoading } = useChannels()
+  const { data: channels, isLoading, error: channelsError, refetch: refetchChannels } = useChannels()
   const { data: allProfiles } = useAllProfiles()
   const { data: myProfile } = useProfile()
   const createChannel = useCreateChannel()
   const createDM = useCreateDM()
+  const { closeMobileMenu } = useMobileNav()
 
   const [channelsOpen, setChannelsOpen] = useState(true)
   const [dmsOpen, setDmsOpen] = useState(true)
@@ -33,6 +34,7 @@ export function Sidebar() {
   const [newChannelPrivate, setNewChannelPrivate] = useState(true)
   const [startingDM, setStartingDM] = useState<string | null>(null)
   const [sidebarSearch, setSidebarSearch] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     try {
@@ -87,24 +89,35 @@ export function Sidebar() {
   const isSearching = q.length > 0
 
   const handleCreateChannel = async () => {
-    if (!newChannelName.trim()) return
-    const ch = await createChannel.mutateAsync({ name: newChannelName.trim(), type: newChannelPrivate ? 'private' : 'public' })
-    setNewChannelName(''); setShowNewChannel(false)
-    router.push(`/channel/${ch.id}`)
+    if (!newChannelName.trim() || createChannel.isPending) return
+    setActionError(null)
+    try {
+      const ch = await createChannel.mutateAsync({ name: newChannelName.trim(), type: newChannelPrivate ? 'private' : 'public' })
+      setNewChannelName(''); setShowNewChannel(false)
+      closeMobileMenu()
+      router.push(`/channel/${ch.id}`)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not create this channel. Please try again.')
+    }
   }
 
   const handleOpenDM = async (userId: string) => {
+    if (startingDM) return
+    setActionError(null)
     const existing = dmMap.get(userId)
-    if (existing) { router.push(`/dm/${existing.channelId}`); return }
+    if (existing) { closeMobileMenu(); router.push(`/dm/${existing.channelId}`); return }
     setStartingDM(userId)
     try {
       const id = await createDM.mutateAsync(userId)
+      closeMobileMenu()
       router.push(`/dm/${id}`)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not open this conversation. Please try again.')
     } finally { setStartingDM(null) }
   }
 
   return (
-    <div className="flex flex-col h-full border-r border-white/10" style={{ background: '#20234A', width: 260 }}>
+    <div className="flex flex-col h-full border-r border-white/10" style={{ background: '#20234A', width: 260, maxWidth: '100%' }}>
 
       {/* ── Workspace header ── */}
       <div className="flex items-center justify-between px-4 pt-4 pb-1 flex-shrink-0">
@@ -122,6 +135,8 @@ export function Sidebar() {
       {/* ── Scrollable body ── */}
       <div className="flex-1 overflow-y-auto sidebar-scroll">
 
+        {(channelsError || actionError) && <div role="alert" className="mx-3 mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs text-white"><p>{channelsError ? 'Unable to load conversations.' : actionError}</p>{channelsError && <button type="button" onClick={() => void refetchChannels()} className="mt-2 font-semibold underline">Retry conversations</button>}</div>}
+
         {/* ── Unified search bar — above channels with gap ── */}
         <div className="px-3 pt-2 pb-3">
           <div
@@ -134,13 +149,14 @@ export function Sidebar() {
           >
             <Search size={14} style={{ color: TEXT_MUTED, flexShrink: 0 }} />
             <input
+              aria-label="Search channels and people"
               value={sidebarSearch}
               onChange={(e) => setSidebarSearch(e.target.value)}
               placeholder="Search channels & people"
               className="flex-1 bg-transparent text-[13px] text-white placeholder-white/40 focus:outline-none min-w-0"
             />
             {sidebarSearch && (
-              <button type="button" onClick={() => setSidebarSearch('')} className="flex-shrink-0">
+              <button type="button" aria-label="Clear sidebar search" onClick={() => setSidebarSearch('')} className="flex-shrink-0">
                 <X size={11} style={{ color: TEXT_MUTED }} />
               </button>
             )}
@@ -186,7 +202,7 @@ export function Sidebar() {
                       key={user.id}
                       type="button"
                       onClick={() => { setSidebarSearch(''); void handleOpenDM(user.id) }}
-                      disabled={startingDM === user.id}
+                      disabled={startingDM !== null}
                       className={cn(
                         'flex items-center gap-2.5 w-[calc(100%-16px)] mx-2 px-2.5 h-9 text-sm transition-colors text-left rounded-lg',
                         isActive ? 'bg-[#289ED8]/35' : 'hover:bg-white/10'
@@ -245,6 +261,8 @@ export function Sidebar() {
                 <div className="px-2 py-1">
                   <input
                     autoFocus value={newChannelName}
+                    aria-label="Channel name"
+                    disabled={createChannel.isPending}
                     onChange={e => setNewChannelName(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === 'Enter') void handleCreateChannel()
@@ -274,6 +292,7 @@ export function Sidebar() {
                   <p className="mt-1 px-1 text-[11px] leading-4" style={{ color: TEXT_MUTED }}>
                     {newChannelPrivate ? 'Only you at first. Add people from Members.' : 'Everyone in the workspace is added.'}
                   </p>
+                  <button type="button" onClick={() => void handleCreateChannel()} disabled={!newChannelName.trim() || createChannel.isPending} className="mt-2 w-full rounded-lg bg-[#289ED8] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{createChannel.isPending ? 'Creating…' : 'Create channel'}</button>
                 </div>
               ) : (
                 <AddRow label="Add channel" onClick={() => setShowNewChannel(true)} />
@@ -299,7 +318,7 @@ export function Sidebar() {
                       key={user.id}
                       type="button"
                       onClick={() => void handleOpenDM(user.id)}
-                      disabled={startingDM === user.id}
+                      disabled={startingDM !== null}
                       className={cn(
                         'flex items-center gap-2.5 w-[calc(100%-16px)] mx-2 px-2.5 h-9 text-sm transition-colors text-left rounded-lg',
                         isActive ? 'bg-[#289ED8]/35' : 'hover:bg-white/10'
@@ -348,6 +367,7 @@ function SidebarSection({
         <button
           type="button"
           onClick={onToggle}
+          aria-expanded={isOpen}
           className="flex items-center gap-1 flex-1 min-w-0 text-left py-1 rounded hover:bg-white/06 transition-colors"
         >
           <ChevronDown

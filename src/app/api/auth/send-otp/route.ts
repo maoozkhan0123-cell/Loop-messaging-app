@@ -1,56 +1,30 @@
-import { NextResponse } from 'next/server'
-import { setOTP } from '@/lib/otpStore'
+﻿import { NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { sendOTPEmail } from '@/lib/email'
-import { randomInt } from 'node:crypto'
 import { COMPANY_EMAIL_ERROR, isCompanyEmail } from '@/lib/auth/companyEmail'
-
-const requests = new Map<string, { count: number; resetAt: number }>()
+import { beginSignupVerification, finishSignupDelivery, SignupVerificationError, type SignupChallenge } from '@/lib/signupVerification'
 
 export async function POST(request: Request) {
+  let challenge: SignupChallenge | undefined
+  let admin: ReturnType<typeof createAdminClient> | undefined
   try {
     const body = await request.json()
     const email = String(body.email ?? '').trim().toLowerCase()
     const displayName = String(body.displayName ?? '').trim()
-    const password = String(body.password ?? '')
-
-    if (!email || !password || !displayName) {
-      return NextResponse.json({ error: 'Name, email, and password are required' }, { status: 400 })
-    }
-
-    if (!isCompanyEmail(email)) {
-      return NextResponse.json({ error: COMPANY_EMAIL_ERROR }, { status: 403 })
-    }
-
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 })
-    }
-
-    const now = Date.now()
-    const limit = requests.get(email)
-    if (limit && limit.resetAt > now && limit.count >= 3) {
-      return NextResponse.json({ error: 'Too many verification requests. Try again in 15 minutes.' }, { status: 429 })
-    }
-    requests.set(email, !limit || limit.resetAt <= now
-      ? { count: 1, resetAt: now + 15 * 60 * 1000 }
-      : { ...limit, count: limit.count + 1 })
-
-    // Generate random 6-digit code
-    const code = randomInt(100000, 1000000).toString()
-
-    // Store OTP in memory
-    setOTP(email, { code, displayName, password })
-
-    // Send email via Hostinger SMTP (info@Bytechsol.com)
-    await sendOTPEmail({
-      to: email,
-      code,
-      name: displayName,
-    })
-
+    if (!email || displayName.length < 2 || displayName.length > 160) return NextResponse.json({ error: 'Enter your name and work email.' }, { status: 400 })
+    if (!isCompanyEmail(email)) return NextResponse.json({ error: COMPANY_EMAIL_ERROR }, { status: 403 })
+    admin = createAdminClient()
+    challenge = await beginSignupVerification(admin, email, displayName)
+    await sendOTPEmail({ to: email, code: challenge.code, name: displayName })
+    await finishSignupDelivery(admin, challenge, true)
     return NextResponse.json({ success: true, message: 'Verification code sent to your email' })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to send verification code'
-    console.error('Send OTP Error:', error)
-    return NextResponse.json({ error: message }, { status: 500 })
+    if (challenge && admin) {
+      try { await finishSignupDelivery(admin, challenge, false) } catch { /* A stale delivery must not expose or overwrite a newer code. */ }
+    }
+    if (error instanceof SignupVerificationError) return NextResponse.json({ error: error.message }, { status: error.status, headers: error.retryAfterSeconds ? { 'Retry-After': String(error.retryAfterSeconds) } : undefined })
+    if (error instanceof SyntaxError) return NextResponse.json({ error: 'Enter valid signup details.' }, { status: 400 })
+    console.error('Signup verification email could not be sent.')
+    return NextResponse.json({ error: 'Verification email could not be sent. Please try again later.' }, { status: 500 })
   }
 }
