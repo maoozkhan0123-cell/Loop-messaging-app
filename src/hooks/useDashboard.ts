@@ -15,6 +15,7 @@ export function useDashboard() {
   const dashboardQuery = useQuery({
     queryKey: ['dashboard'],
     staleTime: 30_000,
+    refetchOnMount: true,
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user.id
@@ -65,10 +66,20 @@ export function useDashboard() {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       void queryClient.invalidateQueries({ queryKey: ['unified-inbox'] })
       void queryClient.invalidateQueries({ queryKey: ['project_task_assignees'] })
+      void queryClient.invalidateQueries({ queryKey: ['project_tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['project_tasks_workspace'] })
+    }
+    const refreshProjects = () => {
+      refreshTasks()
+      void queryClient.invalidateQueries({ queryKey: ['project_boards'] })
+      void queryClient.invalidateQueries({ queryKey: ['project_columns'] })
+      void queryClient.invalidateQueries({ queryKey: ['project_columns_workspace'] })
     }
     const channel = supabase.channel(`dashboard_tasks_${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, refreshTasks)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_task_assignees' }, refreshTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_boards' }, refreshProjects)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_columns' }, refreshProjects)
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [queryClient, supabase, userId])

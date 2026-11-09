@@ -59,6 +59,7 @@ export function useProjects(selectedBoardId?: string) {
   const boardsQuery = useQuery({
     queryKey: ['project_boards'],
     staleTime: 60_000,
+    refetchOnMount: true,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('project_boards')
@@ -76,6 +77,7 @@ export function useProjects(selectedBoardId?: string) {
   // 2. Fetch columns for active board
   const columnsQuery = useQuery({
     queryKey: ['project_columns', activeBoardId],
+    refetchOnMount: true,
     enabled: !!activeBoardId,
     staleTime: 60_000,
     queryFn: async () => {
@@ -93,6 +95,7 @@ export function useProjects(selectedBoardId?: string) {
   // 3. Fetch tasks for active board
   const tasksQuery = useQuery({
     queryKey: ['project_tasks', activeBoardId],
+    refetchOnMount: true,
     enabled: !!activeBoardId,
     staleTime: 30_000,
     queryFn: async () => {
@@ -153,6 +156,7 @@ export function useProjects(selectedBoardId?: string) {
   // query above, while the modal can search every active task by stable ID.
   const workspaceTasksQuery=useQuery({
     queryKey:['project_tasks_workspace'],
+    refetchOnMount:true,
     staleTime:60_000,
     queryFn:async () => {
       const {data,error}=await supabase.from('project_tasks').select('*').is('archived_at',null).order('created_at',{ascending:false})
@@ -162,6 +166,7 @@ export function useProjects(selectedBoardId?: string) {
   })
   const workspaceColumnsQuery=useQuery({
     queryKey:['project_columns_workspace'],
+    refetchOnMount:true,
     staleTime:60_000,
     queryFn:async () => {
       const {data,error}=await supabase.from('project_columns').select('*').order('position',{ascending:true})
@@ -207,11 +212,24 @@ export function useProjects(selectedBoardId?: string) {
     const channel=supabase.channel('project_workspace_catalog').on(
       'postgres_changes',
       {event:'*',schema:'public',table:'project_tasks'},
-      () => { queryClient.invalidateQueries({queryKey:['project_tasks_workspace']}) },
+      () => {
+        void queryClient.invalidateQueries({queryKey:['project_tasks_workspace']})
+        void queryClient.invalidateQueries({queryKey:['dashboard']})
+      },
     ).on(
       'postgres_changes',
       {event:'*',schema:'public',table:'project_columns'},
-      () => { queryClient.invalidateQueries({queryKey:['project_columns_workspace']}) },
+      () => {
+        void queryClient.invalidateQueries({queryKey:['project_columns_workspace']})
+        void queryClient.invalidateQueries({queryKey:['dashboard']})
+      },
+    ).on(
+      'postgres_changes',
+      {event:'*',schema:'public',table:'project_boards'},
+      () => {
+        void queryClient.invalidateQueries({queryKey:['project_boards']})
+        void queryClient.invalidateQueries({queryKey:['dashboard']})
+      },
     ).subscribe()
     return () => { void supabase.removeChannel(channel) }
   },[queryClient,supabase])
@@ -516,6 +534,10 @@ export function useProjects(selectedBoardId?: string) {
     workspaceTasks:workspaceTasksQuery.data||[],
     workspaceColumns:workspaceColumnsQuery.data||[],
     isLoading: boardsQuery.isLoading || columnsQuery.isLoading || tasksQuery.isLoading,
+    isCatalogLoading: boardsQuery.isLoading || workspaceTasksQuery.isLoading || workspaceColumnsQuery.isLoading,
+    catalogError: boardsQuery.error || workspaceTasksQuery.error || workspaceColumnsQuery.error,
+    boardError: boardsQuery.error || columnsQuery.error || tasksQuery.error,
+    refetchProjects: () => Promise.all([boardsQuery.refetch(), workspaceTasksQuery.refetch(), workspaceColumnsQuery.refetch(), ...(activeBoardId ? [columnsQuery.refetch(), tasksQuery.refetch()] : [])]),
     createBoard: createBoardMutation.mutateAsync,
     createColumn: createColumnMutation.mutateAsync,
     createTask: createTaskMutation.mutateAsync,

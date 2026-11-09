@@ -13,6 +13,8 @@ const listeners = new Map<string, () => void>()
 let assignments: Array<{ task_id: string; user_id: string }> = []
 let assignmentError: { code: string; message: string } | null = null
 let primaryAssignee = 'other-member'
+let catalogBoards = [{ id: 'board-1', name: 'Project one' }]
+let catalogColumns = [{ id: 'column-1', board_id: 'board-1', name: 'To do', position: 0 }]
 
 function renderDashboard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
@@ -27,12 +29,15 @@ describe('useDashboard assignments', () => {
     assignments = []
     assignmentError = null
     primaryAssignee = 'other-member'
+    catalogBoards = [{ id: 'board-1', name: 'Project one' }]
+    catalogColumns = [{ id: 'column-1', board_id: 'board-1', name: 'To do', position: 0 }]
     mocks.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'me' } } } })
     mocks.from.mockImplementation((table: string) => {
       const result = () => ({
         data: table === 'project_task_assignees' ? assignments
-          : table === 'project_boards' ? [{ id: 'board-1' }]
-          : table === 'project_tasks' ? [{ id: 'task-1', board_id: 'board-1', assignee_id: primaryAssignee }]
+          : table === 'project_boards' ? catalogBoards
+          : table === 'project_columns' ? catalogColumns
+          : table === 'project_tasks' ? [{ id: 'task-1', board_id: 'board-1', column_id: 'column-1', assignee_id: primaryAssignee }]
           : [],
         error: table === 'project_task_assignees' ? assignmentError : null,
       })
@@ -62,6 +67,56 @@ describe('useDashboard assignments', () => {
     expect(result.current.data?.tasks[0].assignee_ids).toEqual(['other-member', 'me'])
     unmount()
     expect(mocks.removeChannel).toHaveBeenCalledOnce()
+  })
+
+  it('refreshes the project catalog and removes tasks from boards no longer visible after board events', async () => {
+    const { result, unmount } = renderDashboard()
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(listeners.has('project_boards')).toBe(true))
+    expect(result.current.data?.boards.map(board => board.id)).toEqual(['board-1'])
+    catalogBoards = [...catalogBoards, { id: 'board-2', name: 'New project' }]
+    await act(async () => { listeners.get('project_boards')?.() })
+    await waitFor(() => expect(result.current.data?.boards.map(board => board.id)).toEqual(['board-1', 'board-2']))
+    catalogBoards = [{ id: 'board-2', name: 'New project' }]
+    await act(async () => { listeners.get('project_boards')?.() })
+    await waitFor(() => expect(result.current.data?.tasks).toEqual([]))
+    expect(result.current.data?.boards[0].name).toBe('New project')
+    unmount()
+  })
+
+  it('refreshes columns so dashboard completion progress reflects a status change', async () => {
+    const { result, unmount } = renderDashboard()
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(listeners.has('project_columns')).toBe(true))
+    const completedTasks = () => {
+      const data = result.current.data!
+      const doneIds = new Set(data.columns.filter(column => /done|complete/i.test(column.name)).map(column => column.id))
+      return data.tasks.filter(task => doneIds.has(task.column_id)).length
+    }
+    expect(completedTasks()).toBe(0)
+    catalogColumns = [{ id: 'column-1', board_id: 'board-1', name: 'Done', position: 0 }]
+    await act(async () => { listeners.get('project_columns')?.() })
+    await waitFor(() => expect(completedTasks()).toBe(1))
+    expect(result.current.data?.columns[0].name).toBe('Done')
+    unmount()
+  })
+
+  it('refreshes an invalidated inactive dashboard cache on remount despite the global mount setting', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, refetchOnMount: false } } })
+    queryClient.setQueryData(['dashboard'], {
+      userId: 'me',
+      boards: [{ id: 'cached-board', name: 'Cached project', description: null, created_by: 'me', created_at: '2026-11-09T12:00:00.000Z', archived_at: null }],
+      columns: [], tasks: [], myTaskIds: new Set<string>(), profiles: [],
+    })
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    expect(queryClient.getQueryState(['dashboard'])?.isInvalidated).toBe(true)
+    const wrapper = ({ children }: PropsWithChildren) => createElement(QueryClientProvider, { client: queryClient }, children)
+    const { result, unmount } = renderHook(() => useDashboard(), { wrapper })
+    await waitFor(() => expect(result.current.data?.boards.map(board => board.id)).toEqual(['board-1']))
+    expect(result.current.data?.boards[0].name).toBe('Project one')
+    expect(result.current.data?.tasks.map(task => task.id)).toEqual(['task-1'])
+    unmount()
+    queryClient.clear()
   })
 
   it.each(['42P01', 'PGRST205'])('keeps primary assignments readable before the assignment migration (%s)', async (code) => {

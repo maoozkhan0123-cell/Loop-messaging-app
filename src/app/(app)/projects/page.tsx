@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { CreateTaskDialog } from '@/components/tasks/CreateTaskDialog'
+import { ProjectsOverview } from '@/components/projects/ProjectsOverview'
 import { TaskAssignees } from '@/components/tasks/TaskAssignees'
 import { TaskCardSummary } from '@/components/tasks/TaskCardSummary'
 import { parseTaskSharedMetadata } from '@/lib/taskMetadata'
@@ -56,7 +57,7 @@ function ProjectsPageContent() {
   const urlBoardId = searchParams.get('board')
   const urlTaskId = searchParams.get('task')
   const newTaskRequested = searchParams.get('newTask') === '1'
-  const [selectedBoardId, setSelectedBoardId] = useState<string | undefined>(undefined)
+  const showOverview = !urlBoardId && !urlTaskId && !newTaskRequested
   const {
     boards,
     activeBoardId,
@@ -65,6 +66,10 @@ function ProjectsPageContent() {
     workspaceTasks,
     workspaceColumns,
     isLoading,
+    isCatalogLoading,
+    catalogError,
+    boardError,
+    refetchProjects,
     createBoard,
     createColumn,
     createTask,
@@ -73,7 +78,7 @@ function ProjectsPageContent() {
     updateTask,
     deleteTask,
     addTaskComment
-  } = useProjects(selectedBoardId)
+  } = useProjects(urlBoardId || undefined)
 
   const { data: teamProfiles = [] } = useAllProfiles()
   const { data: currentProfile } = useProfile()
@@ -98,14 +103,11 @@ function ProjectsPageContent() {
   const [workView, setWorkView] = useState<WorkView>('board')
 
   useEffect(() => {
-    if (urlBoardId && urlBoardId !== selectedBoardId) setSelectedBoardId(urlBoardId)
-  }, [selectedBoardId, urlBoardId])
-
-  useEffect(() => {
     if (!newTaskRequested || !activeBoardId || !columns[0]) return
     const params = new URLSearchParams(queryString)
     setTargetColumnId(columns[0].id)
     setShowNewTaskModal(true)
+    params.set('board', activeBoardId)
     params.delete('newTask')
     const next = params.toString()
     router.replace(next ? `/projects?${next}` : '/projects', { scroll: false })
@@ -121,12 +123,14 @@ function ProjectsPageContent() {
   })
 
   const handleBoardChange = (boardId: string) => {
-    setSelectedBoardId(boardId || undefined)
     setSelectedTask(null)
+    setSearchQuery('')
+    setPriorityFilter('all')
     const params = new URLSearchParams(queryString)
     if (boardId) params.set('board', boardId)
     else params.delete('board')
     params.delete('task')
+    params.delete('newTask')
     const next = params.toString()
     router.push(next ? `/projects?${next}` : '/projects', { scroll: false })
   }
@@ -168,7 +172,7 @@ function ProjectsPageContent() {
     })
   }
 
-  const currentBoard = boards.find((b) => b.id === (activeBoardId || selectedBoardId))
+  const currentBoard = boards.find((b) => b.id === activeBoardId)
 
   useEffect(() => {
     if (!urlTaskId) {
@@ -176,8 +180,7 @@ function ProjectsPageContent() {
       return
     }
 
-    const task = tasks.find((item) => item.id === urlTaskId)
-    if (task) setSelectedTask(task)
+    setSelectedTask(tasks.find((item) => item.id === urlTaskId) ?? null)
   }, [tasks, urlTaskId])
 
   const openTask = (task: ProjectTask) => {
@@ -205,19 +208,21 @@ function ProjectsPageContent() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
+    <div className="min-h-0 min-w-0 flex-1 flex flex-col h-full bg-[var(--app-bg)] overflow-hidden">
       {/* Top Header */}
-      <header className="bg-white border-b border-[#E4E4E7] px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 flex-shrink-0 z-10 shadow-2xs">
+      {!showOverview && <header className="bg-white border-b border-[#E4E4E7] px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 flex-shrink-0 z-10 shadow-2xs">
         <div className="flex items-center gap-2.5 sm:gap-3">
+          <button type="button" onClick={() => handleBoardChange('')} className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"><ChevronLeft size={15} />All projects</button>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-black flex items-center justify-center text-white shadow-sm flex-shrink-0">
             <Kanban size={18} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <select
+                aria-label="Select project"
                 value={activeBoardId || ''}
                 onChange={(e) => handleBoardChange(e.target.value)}
-                className="text-base sm:text-lg font-bold text-[#000000] bg-transparent focus:outline-none cursor-pointer border border-transparent hover:border-[#E4E4E7] rounded-lg px-1 sm:px-2 py-0.5 transition-colors max-w-[160px] sm:max-w-none truncate"
+                className="text-base sm:text-lg font-bold text-[#000000] bg-transparent focus:outline-none cursor-pointer border border-transparent hover:border-[#E4E4E7] rounded-lg px-1 sm:px-2 py-0.5 transition-colors max-w-[145px] sm:max-w-[240px] truncate"
               >
                 {boards.length === 0 && <option value="">No Project Boards</option>}
                 {boards.map((b) => (
@@ -288,15 +293,21 @@ function ProjectsPageContent() {
             </button>
           )}
         </div>
-      </header>
+      </header>}
 
       {/* Main Board View */}
-      <main className="flex-1 p-3 sm:p-6 overflow-x-auto overflow-y-hidden">
-        {isLoading ? (
+      <main className={`min-h-0 min-w-0 flex-1 p-4 sm:p-6 ${showOverview ? 'overflow-y-auto' : 'overflow-x-auto overflow-y-hidden'}`}>
+        {(showOverview ? catalogError : boardError) ? (
+          <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-sm text-[var(--muted-foreground)]"><p>Unable to load your projects. Please try again.</p><button type="button" onClick={() => void refetchProjects()} className="rounded-lg bg-[var(--primary)] px-4 py-2 font-semibold text-white">Try again</button></div>
+        ) : (showOverview ? isCatalogLoading : isLoading) ? (
           <div className="h-full flex items-center justify-center text-[#9CA3AF] text-sm gap-2">
             <div className="w-5 h-5 border-2 border-[#1E40AF] border-t-transparent rounded-full animate-spin" />
-            Loading project board...
+            {showOverview ? 'Loading projects...' : 'Loading project board...'}
           </div>
+        ) : showOverview ? (
+          <ProjectsOverview boards={boards} tasks={workspaceTasks} columns={workspaceColumns} onOpenBoard={handleBoardChange} onCreateBoard={() => setShowNewBoardModal(true)} />
+        ) : boards.length > 0 && !currentBoard ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center"><h1 className="text-lg font-semibold">Project unavailable</h1><p className="text-sm text-[var(--muted-foreground)]">This project may have been archived, or you may no longer have access.</p><button type="button" onClick={() => handleBoardChange('')} className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white">View all projects</button></div>
         ) : boards.length === 0 ? (
           /* Empty state */
           <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto px-4">
