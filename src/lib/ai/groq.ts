@@ -1,8 +1,15 @@
 import Groq from 'groq-sdk'
 
-// Groq's free tier: ~30 requests/min and a few thousand tokens/min per model, shared by the whole
-// workspace. Prompts and tool results are kept short for that reason. Override the model with GROQ_MODEL.
+// Keep prompts and tool results bounded; model limits are shared by the workspace.
+// Override the model with GROQ_MODEL.
 export const AI_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
+
+/** These options are supported by GPT-OSS, but not every model available through Groq. */
+export function getReasoningOptions(model = AI_MODEL) {
+  return /^openai\/gpt-oss-(20b|120b)$/.test(model)
+    ? { include_reasoning: false, reasoning_effort: 'low' as const }
+    : {}
+}
 
 let client: Groq | null = null
 

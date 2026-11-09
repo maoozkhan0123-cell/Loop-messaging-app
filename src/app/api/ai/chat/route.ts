@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { AI_MODEL, Groq, getGroq } from '@/lib/ai/groq'
+import { AI_MODEL, Groq, getGroq, getReasoningOptions } from '@/lib/ai/groq'
 import { AI_TOOLS, runTool, type TaskProposal } from '@/lib/ai/tools'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -14,7 +14,7 @@ type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
 const missingTable = (error: { code?: string } | null) => !!error && (error.code === '42P01' || error.code === 'PGRST205')
 
-/** Saves the question and answer to the user's chat history (migration 017). History is optional:
+/** Saves the question and answer to the user's chat history (migration 018). History is optional:
  *  without the tables the assistant still answers, it just doesn't remember the chat. */
 async function saveTurn(supabase: SupabaseClient, conversationId: string | undefined, question: string, reply: string, proposals: TaskProposal[]) {
   let id = conversationId
@@ -44,11 +44,11 @@ type AiLanguage = 'auto' | 'english' | 'roman_urdu'
 
 // The real app, so "how do I…" answers describe screens that exist.
 const APP_GUIDE = [
-  '- Left menu: Home, Inbox, Messages, Projects, Calendar, Files, Ideas, Team. "Ask AI" is in the top bar; Preferences and Profile are under the avatar at the bottom of the left menu.',
-  '- Home: "My tasks" (open tasks assigned to you, soonest due first, tick to complete), ongoing projects with progress, a mini calendar with your deadlines and events, and who is online.',
+  '- Left menu: Home, Messages, Projects, Calendar, Files, Ideas, Team. "Ask AI" is in the top bar; Preferences and Profile are under the avatar at the bottom of the left menu.',
+  '- Home: "My tasks" (open tasks assigned to you, soonest due first, tick to complete), ongoing projects with progress, a mini calendar with your deadlines and events, and who is online. "All my tasks" opens Inbox.',
   '- Inbox: tasks assigned to you, grouped by month, with All / Pending / Cleared tabs. A task turns unread when someone else updates or comments on it. Clicking a task opens it as a full page.',
   '- Task page: title and description, a Properties card (status, assignees, priority, labels, start and due dates, estimate, linked work) where everything is edited by clicking it and saves immediately ("All changes saved" at the top), a checklist, attachments, and Comments / History on the right. The sparkle button summarises the task with AI.',
-  '- Projects: boards with To Do, In Progress, Review and Done columns. Employees see a project only if they own it or have a task in it, and only their own tasks inside it; admins see everything.',
+  '- Projects: an overview of accessible project boards. Choose a project card or the project selector to open its board, with To Do, In Progress, Review and Done columns. Employees see a project only if they own it or have a task in it, and only their own tasks inside it; admins see everything.',
   '- Messages: channels and direct messages in a side list. Type @ to mention someone. The composer has bold, italic, lists, code, links, emoji, files, voice notes and scheduled sending. New channels can be Private (add people from Members) or Everyone.',
   '- Calendar: company-wide events (only admins post these, e.g. holidays), invite-only meetings, and your task deadlines. "New event" lets you invite people and choose who can see it.',
   '- Files: files shared in your conversations. Ideas: the team ideas board. Team: everyone in the workspace, with message buttons.',
@@ -87,22 +87,26 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 })
 
   const groq = getGroq()
-  if (!groq) return NextResponse.json({ error: 'The AI assistant is not set up yet. Add GROQ_API_KEY to the server environment.' }, { status: 503 })
+  if (!groq) return NextResponse.json({ error: 'The AI assistant is not available yet. Please contact your workspace admin.' }, { status: 503 })
 
-  let body: { messages?: ChatTurn[]; context?: { type: string; id: string }; today?: string; timeZone?: string; conversationId?: string; language?: string }
-  try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }) }
+  let payload: unknown
+  try { payload = await request.json() } catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }) }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
+  const body = payload as Record<string, unknown>
 
   const history = (Array.isArray(body.messages) ? body.messages : [])
-    .filter((turn) => (turn.role === 'user' || turn.role === 'assistant') && typeof turn.content === 'string' && turn.content.trim())
+    .filter((turn): turn is ChatTurn => !!turn && typeof turn === 'object' && (turn.role === 'user' || turn.role === 'assistant') && typeof turn.content === 'string' && !!turn.content.trim())
     .slice(-MAX_HISTORY)
     .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 4000) }))
   if (!history.length || history[history.length - 1].role !== 'user') return NextResponse.json({ error: 'Ask a question first.' }, { status: 400 })
 
-  const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today ?? '') ? body.today! : new Date().toISOString().slice(0, 10)
-  let timeZone = String(body.timeZone ?? 'UTC').slice(0, 60)
+  const today = typeof body.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : new Date().toISOString().slice(0, 10)
+  let timeZone = typeof body.timeZone === 'string' ? body.timeZone.slice(0, 60) : 'UTC'
   try { new Intl.DateTimeFormat('en', { timeZone }) } catch { timeZone = 'UTC' }
   const conversationId = typeof body.conversationId === 'string' && /^[0-9a-f-]{36}$/i.test(body.conversationId) ? body.conversationId : undefined
-  const context = body.context && ['task', 'channel'].includes(body.context.type) ? { type: body.context.type, id: String(body.context.id).slice(0, 64) } : undefined
+  const rawContext = body.context && typeof body.context === 'object' ? body.context as Record<string, unknown> : undefined
+  const context = rawContext && (rawContext.type === 'task' || rawContext.type === 'channel') && typeof rawContext.id === 'string'
+    ? { type: rawContext.type, id: rawContext.id.slice(0, 64) } : undefined
   const chosen: AiLanguage = (['english', 'roman_urdu'] as const).find((value) => value === body.language) ?? 'auto'
   const lastQuestion = history[history.length - 1].content
   // Auto: models drift into Roman Urdu for informal English, so decide from the user's own words.
@@ -126,7 +130,7 @@ export async function POST(request: Request) {
         tool_choice: round < MAX_TOOL_ROUNDS ? 'auto' : undefined,
         temperature: 0.3,
         max_completion_tokens: 1200,
-        include_reasoning: false,
+        ...getReasoningOptions(),
       })
       const message = completion.choices[0]?.message
       const calls = message?.tool_calls ?? []
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
         const question = history[history.length - 1].content
         if (URDU_SCRIPT.test(reply) && !URDU_SCRIPT.test(question)) {
           const fixed = await groq.chat.completions.create({
-            model: AI_MODEL, temperature: 0.2, max_completion_tokens: 1200, include_reasoning: false,
+            model: AI_MODEL, temperature: 0.2, max_completion_tokens: 1200, ...getReasoningOptions(),
             messages: [...messages, { role: 'assistant', content: reply }, { role: 'user', content: 'Rewrite your last answer with exactly the same content, using only English (Latin) letters: Roman Urdu where it was Urdu. No Urdu script at all.' }],
           }).catch(() => null)
           const text = fixed?.choices[0]?.message?.content?.trim()
@@ -155,10 +159,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ reply, proposals, ...saved })
   } catch (error) {
     if (error instanceof Groq.RateLimitError) {
-      return NextResponse.json({ error: 'The free AI limit is reached for the moment. Wait a minute and try again.' }, { status: 429 })
+      return NextResponse.json({ error: 'The AI limit is reached for the moment. Wait a minute and try again.' }, { status: 429 })
     }
     if (error instanceof Groq.AuthenticationError) {
-      return NextResponse.json({ error: 'The AI key is not valid. Check GROQ_API_KEY.' }, { status: 503 })
+      return NextResponse.json({ error: 'The AI assistant is temporarily unavailable. Please contact your workspace admin.' }, { status: 503 })
     }
     if (error instanceof Groq.APIError) {
       console.error('Groq API error:', error.status, error.message)
