@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Hash, Lock, MessageSquare, Menu, Sparkles } from 'lucide-react'
+import { Search, Hash, Lock, MessageSquare, Menu, Bot } from 'lucide-react'
 import { openAssistant } from '@/components/ai/AssistantPanel'
 import { useRouter } from 'next/navigation'
 import { useChannels, useCreateDM } from '@/hooks/useChannels'
@@ -319,7 +319,7 @@ export function Toolbar() {
         title="Ask Bytechsol AI"
         className="flex h-[30px] flex-shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-white/20 sm:px-3.5"
       >
-        <Sparkles size={14} />
+        <Bot size={16} aria-hidden="true" />
         <span className="hidden sm:inline">Ask AI</span>
       </button>
     </div>
