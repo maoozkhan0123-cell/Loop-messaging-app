@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, MessagesSquare, FolderOpen, Smile, X, Camera, Loader2, Bell, BellOff, Kanban, Lightbulb, Users, Settings, Inbox, CalendarDays } from 'lucide-react'
+import { Home, MessagesSquare, FolderOpen, Smile, X, Camera, Loader2, Bell, BellOff, Kanban, Lightbulb, Users, Settings, CalendarDays } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { Avatar } from '@/components/ui/Avatar'
 import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
@@ -56,7 +56,7 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
   }, [])
 
   const isHome = pathname === '/' || pathname === '/dashboard'
-  const isMessages = pathname === '/messages' || pathname.startsWith('/dm/')
+  const isMessages = pathname === '/messages' || pathname.startsWith('/dm/') || pathname.startsWith('/channel/')
 
   const statusColor =
     profile?.status === 'online' ? '#36D7AE'
@@ -123,7 +123,6 @@ export function IconRail({ onOpenSidebar, onCloseSidebar, compact = false, joins
         className={cn('min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] flex flex-col', compact ? 'items-center gap-px pt-3' : 'gap-1 pt-6 pb-4')}
       >
         <RailBtn compact={compact} onDark={joinsSidebar} icon={Home} label="Home" isActive={isHome} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/dashboard') }} />
-        <RailBtn compact={compact} onDark={joinsSidebar} icon={Inbox} label="Inbox" isActive={pathname === '/inbox'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/inbox') }} />
         <RailBtn compact={compact} onDark={joinsSidebar} icon={MessagesSquare} label="Messages" isActive={isMessages} onClick={() => { onOpenSidebar(); router.push('/messages') }} />
         <RailBtn compact={compact} onDark={joinsSidebar} icon={Users} label="Team" isActive={pathname === '/people'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/people') }} />
         <RailBtn compact={compact} onDark={joinsSidebar} icon={FolderOpen} label="Files" isActive={pathname === '/files'} onClick={() => { onCloseSidebar(); closeMobileMenu(); router.push('/files') }} />
