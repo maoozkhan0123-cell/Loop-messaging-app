@@ -6,6 +6,7 @@ import {
   type TaskActionOutcome,
 } from './useTaskDetails'
 import { taskDetailsFromProjectTask } from '@/lib/taskMutations'
+import { createTaskSharedMetadata, taskSharedMetadataFromState } from '@/lib/taskMetadata'
 import type { ProjectTask } from '@/types/database'
 
 const createdAt = '2026-11-02T12:00:00.000Z'
@@ -26,6 +27,74 @@ const projectTask: ProjectTask = {
 const taskSeed = taskDetailsFromProjectTask(projectTask, {
   columnName: 'To Do',
   now: createdAt,
+})
+
+describe('shared task metadata hydration', () => {
+  it('clones a foreign label instead of overwriting an existing task-scoped identity', () => {
+    const store = createTaskDetailsStore(null)
+    const metadata = createTaskSharedMetadata(['Release'], [], createdAt)
+    const first = renderHook(() => useTaskDetails({ ...projectTask, id: 'foreign-label-a', task_metadata: metadata }, { store, actorId: 'user-1' }))
+    const firstId = first.result.current.labels[0].id
+    act(() => { first.result.current.updateLabel(firstId, { name: 'Launch' }) })
+    const second = renderHook(() => useTaskDetails({ ...projectTask, id: 'foreign-label-b', task_metadata: metadata }, { store, actorId: 'user-1' }))
+    act(() => { second.result.current.addLabel(firstId) })
+    expect(second.result.current.labels.map(label => label.name).sort()).toEqual(['Launch', 'Release'])
+    expect(second.result.current.labels.map(label => label.id)).not.toContain(firstId)
+    expect(first.result.current.labels.map(label => label.name)).toEqual(['Launch'])
+  })
+
+  it('keeps same-named labels isolated when another task hydrates, renames, or deletes them', () => {
+    const store = createTaskDetailsStore(null)
+    const metadata = createTaskSharedMetadata(['Release'], [], createdAt)
+    const taskA = { ...projectTask, id: 'label-task-a', task_metadata: metadata }
+    const taskB = { ...projectTask, id: 'label-task-b', task_metadata: metadata }
+    const first = renderHook(() => useTaskDetails(taskA, { store, actorId: 'user-1' }))
+    const firstLabelId = first.result.current.labels[0].id
+    act(() => { first.result.current.updateLabel(firstLabelId, { name: 'Launch' }) })
+    const second = renderHook(({ task }) => useTaskDetails(task, { store, actorId: 'user-1' }), { initialProps: { task: taskB } })
+    const secondLabelId = second.result.current.labels[0].id
+    expect(secondLabelId).not.toBe(firstLabelId)
+    expect(first.result.current.labels.map(label => label.name)).toEqual(['Launch'])
+    expect(second.result.current.labels.map(label => label.name)).toEqual(['Release'])
+    expect(second.result.current.allLabels.map(label => label.name)).toEqual(['Release'])
+    second.rerender({ task: { ...taskB, task_metadata: { ...metadata, labels: metadata.labels.map(label => ({ ...label, color: 'rose' as const })) } } })
+    expect(first.result.current.labels[0]).toMatchObject({ name: 'Launch', color: 'blue' })
+    act(() => { second.result.current.deleteLabel(secondLabelId) })
+    expect(first.result.current.labels[0].name).toBe('Launch')
+    act(() => { second.result.current.createLabel('Launch', 'emerald') })
+    expect(second.result.current.labels[0]).toMatchObject({ name: 'Launch', color: 'emerald' })
+    expect(second.result.current.labels[0].id).not.toBe(firstLabelId)
+    const saved = taskSharedMetadataFromState(first.result.current.task!, store.getSnapshot().state)
+    expect(saved.labels[0]).toMatchObject({ id: firstLabelId, name: 'Launch' })
+  })
+
+  it('loads labels and checklists into a fresh browser store and removes stale local assignees', () => {
+    const store = createTaskDetailsStore(null)
+    store.hydrate()
+    store.seed({ ...taskSeed, assigneeIds: ['stale-member'] }, { actorId: 'user-1' })
+    const metadata = createTaskSharedMetadata(['Release'], [{ label: 'Check the release' }], createdAt)
+    const remote = { ...projectTask, assignee_ids: ['user-1', 'user-2'], labels: ['Release'], task_metadata: metadata }
+    const { result, rerender } = renderHook(({ task }) => useTaskDetails(task, { store, actorId: 'user-1' }), { initialProps: { task: remote } })
+    expect(result.current.task?.assigneeIds).toEqual(['user-1', 'user-2'])
+    expect(result.current.labels.map(label => label.name)).toEqual(['Release'])
+    expect(result.current.task?.checklists).toEqual(metadata.checklists)
+    rerender({ task: { ...remote, assignee_ids: [], labels: [], task_metadata: { schemaVersion: 1, labels: [], checklists: [] } } })
+    expect(result.current.task?.assigneeIds).toEqual([])
+    expect(result.current.task?.checklists).toEqual([])
+    expect(result.current.labels).toEqual([])
+  })
+
+  it('keeps legacy local details for unversioned rows and supplies complete metadata to the save callback', () => {
+    const store = createTaskDetailsStore(null)
+    const onTaskChange = vi.fn()
+    const { result } = renderHook(() => useTaskDetails({ ...projectTask, task_metadata: {} }, { store, actorId: 'user-1', onTaskChange }))
+    act(() => { result.current.createLabel('Ready', 'emerald') })
+    const latest = onTaskChange.mock.calls.at(-1)!
+    expect(latest[0].labelIds).toHaveLength(1)
+    expect(Object.values(latest[2].labels)).toEqual([expect.objectContaining({ name: 'Ready', color: 'emerald' })])
+    act(() => { result.current.addChecklist('Local checklist') })
+    expect(result.current.task?.checklists[0].title).toBe('Local checklist')
+  })
 })
 
 describe('TaskDetailsStore resilience', () => {

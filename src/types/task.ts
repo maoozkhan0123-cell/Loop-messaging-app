@@ -87,6 +87,13 @@ export interface Checklist {
   updatedAt: string
 }
 
+/** Rich task fields shared through the project's authenticated task record. */
+export interface TaskSharedMetadata {
+  schemaVersion: 1
+  labels: TaskLabel[]
+  checklists: Checklist[]
+}
+
 export interface TaskAttachment {
   id: string
   taskId: string

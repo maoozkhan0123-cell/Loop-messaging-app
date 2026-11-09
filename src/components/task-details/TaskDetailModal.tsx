@@ -25,6 +25,8 @@ import {
   deleteAttachmentBlob,
 } from "@/lib/attachmentStorage";
 import { taskDetailsFromProjectTask } from "@/lib/taskMutations";
+import type { TaskMutation } from "@/lib/taskMutations";
+import { isSharedTaskMetadataMutation, taskSharedMetadataFromState } from "@/lib/taskMetadata";
 import { deleteTaskCoverImage } from "@/lib/taskCover";
 import { TaskTitleEditor } from "./TaskTitleEditor";
 import { TaskQuickActions } from "./TaskQuickActions";
@@ -53,6 +55,8 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskTrashEntry,
+  TaskSharedMetadata,
+  TaskStoreState,
 } from "@/types/task";
 
 const STATUS_META: Record<TaskStatus, { label: string; color: string }> = {
@@ -75,6 +79,8 @@ type UpdateTaskParams = {
   startDate?: string | null;
   estimatedHours?: number | null;
   archivedAt?: string | null;
+  labels?: string[];
+  taskMetadata?: TaskSharedMetadata;
 };
 
 export interface TaskDetailModalProps {
@@ -158,12 +164,40 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     [commentProfiles, currentProfile, teamProfiles],
   );
   const actorId = currentProfile?.id || projectTask.created_by || "local-user";
+  const [metadataSaving, setMetadataSaving] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const metadataQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const metadataPendingCount = useRef(0);
+  const metadataDraft = useRef<{ taskId: string; metadata: TaskSharedMetadata } | null>(null);
+  const persistMetadata = useCallback((draft: { taskId: string; metadata: TaskSharedMetadata }) => {
+    metadataDraft.current = draft;
+    metadataPendingCount.current += 1;
+    setMetadataSaving(true);
+    const pending = metadataQueue.current.catch(() => undefined).then(() => onUpdate({
+      taskId: draft.taskId, labels: draft.metadata.labels.map(label => label.name), taskMetadata: draft.metadata,
+    }));
+    metadataQueue.current = pending;
+    void pending.then(() => {
+      if (metadataDraft.current === draft) setMetadataError(null);
+    }, cause => {
+      setMetadataError(errorMessage(cause));
+    }).finally(() => {
+      metadataPendingCount.current -= 1;
+      if (!metadataPendingCount.current) setMetadataSaving(false);
+    });
+  }, [onUpdate]);
+  const shareMetadataChange = useCallback((nextTask: TaskDetails | undefined, mutation: TaskMutation, state: TaskStoreState) => {
+    if (!nextTask || !isSharedTaskMetadataMutation(mutation.type)) return;
+    persistMetadata({ taskId: nextTask.id, metadata: taskSharedMetadataFromState(nextTask, state) });
+  }, [persistMetadata]);
   const details = useTaskDetails(projectTask, {
     actorId,
     columnName: currentColumn?.name,
     projectId: projectTask.board_id,
     taskKey: `TASK-${projectTask.id.slice(0, 6).toUpperCase()}`,
     canManageAllComments: false,
+    skipSharedMetadataHydration: metadataSaving || Boolean(metadataError),
+    onTaskChange: shareMetadataChange,
   });
   const task = details.task;
   const dispatchTask = details.dispatch;
@@ -324,9 +358,9 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, details, focusComment]);
 
-  const hasUnsaved = titleDirty || descriptionDirty || commentDirty;
+  const hasUnsaved = titleDirty || descriptionDirty || commentDirty || Boolean(metadataError);
   const requestClose = useCallback(async () => {
-    if (busy) return;
+    if (busy || metadataSaving) return;
     if (
       hasUnsaved &&
       !(await confirmDialog({
@@ -337,7 +371,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
     )
       return;
     onClose();
-  }, [busy, hasUnsaved, onClose]);
+  }, [busy, metadataSaving, hasUnsaved, onClose]);
 
   if (!details.hydrated || !task)
     return asPage ? <LoadingPage /> : <LoadingDialog onClose={requestClose} />;
@@ -840,7 +874,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
               <div className="min-w-0 flex-1 truncate text-[11px] font-semibold sm:hidden">
                 {task.key}
               </div>
-              <SaveStatus state={saveState} />
+              <SaveStatus state={metadataError ? "error" : metadataSaving ? "saving" : saveState} />
               <div className="shrink-0">
                 <StatusMenu
                   variant="field"
@@ -849,7 +883,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                   statusOf={statusFromColumn}
                   meta={STATUS_META}
                   onChange={changeStatus}
-                  disabled={Boolean(busy)}
+                  disabled={Boolean(busy) || metadataSaving}
                 />
               </div>
               <div className="flex shrink-0 items-center gap-0.5">
@@ -920,7 +954,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                 <IconButton
                   label="Close task"
                   onClick={requestClose}
-                  disabled={Boolean(busy)}
+                  disabled={Boolean(busy) || metadataSaving}
                 >
                   <X size={18} />
                 </IconButton>
@@ -943,6 +977,12 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
                 >
                   <X size={13} />
                 </button>
+              </div>
+            )}
+            {metadataError && (
+              <div role="alert" className="flex shrink-0 items-center justify-between gap-3 bg-red-500/10 px-4 py-2 text-xs text-[var(--danger)]">
+                <span>Labels or checklist changes were not saved: {metadataError}</span>
+                <button type="button" disabled={metadataSaving} onClick={() => { if (metadataDraft.current) persistMetadata(metadataDraft.current); }} className="shrink-0 rounded border border-current px-2 py-1 font-semibold disabled:opacity-50">Retry saving</button>
               </div>
             )}
             <div

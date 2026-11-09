@@ -3,6 +3,9 @@
 import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { createDashboardTask, type CreateDashboardTaskInput } from '@/lib/createDashboardTask'
+import { parseTaskSharedMetadata } from '@/lib/taskMetadata'
+import type { TaskSharedMetadata } from '@/types/task'
 import type {
   ProjectBoard,
   ProjectColumn,
@@ -108,9 +111,7 @@ export function useProjects(selectedBoardId?: string) {
       const assigneesByTask = await loadTaskAssignees(supabase, typedTasks.map((t) => t.id))
 
       // Fetch profiles for assignees
-      const assigneeIds = Array.from(
-        new Set(typedTasks.map((t: ProjectTask) => t.assignee_id).filter(Boolean))
-      ) as string[]
+      const assigneeIds = Array.from(new Set(typedTasks.flatMap(task => [task.assignee_id, ...(assigneesByTask[task.id] ?? [])]).filter((id): id is string => Boolean(id))))
 
       let profilesMap: Record<string, Profile> = {}
       if (assigneeIds.length > 0) {
@@ -141,7 +142,7 @@ export function useProjects(selectedBoardId?: string) {
       return typedTasks.map((t: ProjectTask) => ({
         ...t,
         assignee: t.assignee_id ? profilesMap[t.assignee_id] : undefined,
-        assignee_ids: assigneesByTask[t.id] ?? (t.assignee_id ? [t.assignee_id] : []),
+        assignee_ids: Array.from(new Set([...(t.assignee_id ? [t.assignee_id] : []), ...(assigneesByTask[t.id] ?? [])])),
         comments_count: commentsCountMap[t.id] || 0
       })) as ProjectTask[]
     }
@@ -189,6 +190,12 @@ export function useProjects(selectedBoardId?: string) {
           queryClient.invalidateQueries({ queryKey: ['project_columns', activeBoardId] })
         }
       )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_task_assignees' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['project_tasks', activeBoardId] })
+        void queryClient.invalidateQueries({ queryKey: ['project_tasks_workspace'] })
+        void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        void queryClient.invalidateQueries({ queryKey: ['unified-inbox'] })
+      })
       .subscribe()
 
     return () => {
@@ -265,59 +272,15 @@ export function useProjects(selectedBoardId?: string) {
 
   // Mutation: Create Task
   const createTaskMutation = useMutation({
-    mutationFn: async ({
-      id,
-      boardId,
-      columnId,
-      title,
-      description,
-      priority = 'medium',
-      assigneeId,
-      dueDate,
-      startDate,
-      estimatedHours,
-    }: {
-      id?: string
-      boardId: string
-      columnId: string
-      title: string
-      description?: string
-      priority?: TaskPriority
-      assigneeId?: string
-      dueDate?: string
-      startDate?: string
-      estimatedHours?:number
-    }) => {
-      const { data: { user } } = await supabase.auth.getUser()
-      const columnTasks = (tasksQuery.data || []).filter((t) => t.column_id === columnId)
-      const nextPos = columnTasks.length
-
-      const { data, error } = await supabase
-        .from('project_tasks')
-        .insert({
-          ...(id ? { id } : {}),
-          board_id: boardId,
-          column_id: columnId,
-          title,
-          description: description || null,
-          priority,
-          assignee_id: assigneeId || null,
-          due_date: dueDate || null,
-          start_date:startDate||null,
-          estimated_hours:estimatedHours??null,
-          created_by: user?.id || null,
-          position: nextPos
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      return data as ProjectTask
+    mutationFn: async (input: Omit<CreateDashboardTaskInput, 'priority' | 'dueDate'> & { priority?: TaskPriority; dueDate?: string | null }) => {
+      const nextPos = (tasksQuery.data || []).filter(task => task.column_id === input.columnId).length
+      return createDashboardTask(supabase, { ...input, priority: input.priority ?? 'medium', dueDate: input.dueDate ?? '' }, nextPos)
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['project_tasks', vars.boardId] })
       queryClient.invalidateQueries({queryKey:['project_tasks_workspace']})
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['unified-inbox'] })
     }
   })
 
@@ -426,7 +389,9 @@ export function useProjects(selectedBoardId?: string) {
       dueDate,
       startDate,
       estimatedHours,
-      archivedAt
+      archivedAt,
+      labels,
+      taskMetadata,
     }: {
       taskId: string
       title?: string
@@ -440,6 +405,8 @@ export function useProjects(selectedBoardId?: string) {
       startDate?: string | null
       estimatedHours?: number | null
       archivedAt?: string | null
+      labels?: string[]
+      taskMetadata?: TaskSharedMetadata
     }) => {
       const updates: Record<string, unknown> = {}
       if (title !== undefined) updates.title = title
@@ -452,6 +419,13 @@ export function useProjects(selectedBoardId?: string) {
       if (startDate !== undefined) updates.start_date = startDate
       if (estimatedHours !== undefined) updates.estimated_hours = estimatedHours
       if (archivedAt !== undefined) updates.archived_at = archivedAt
+      if (labels !== undefined) updates.labels = labels
+      if (taskMetadata !== undefined) {
+        const metadata = parseTaskSharedMetadata(taskMetadata)
+        if (!metadata) throw new Error('Task labels or checklists could not be saved. Refresh and try again.')
+        updates.task_metadata = metadata
+        updates.labels = metadata.labels.map(label => label.name)
+      }
 
       if (assigneeIds !== undefined) await saveTaskAssignees(supabase, taskId, assigneeIds)
 
@@ -481,6 +455,8 @@ export function useProjects(selectedBoardId?: string) {
           ...(variables.startDate!==undefined?{start_date:variables.startDate}:{}),
           ...(variables.estimatedHours!==undefined?{estimated_hours:variables.estimatedHours}:{}),
           ...(variables.archivedAt!==undefined?{archived_at:variables.archivedAt}:{}),
+          ...(variables.labels!==undefined?{labels:variables.labels}:{}),
+          ...(variables.taskMetadata!==undefined?{task_metadata:variables.taskMetadata,labels:variables.taskMetadata.labels.map(label => label.name)}:{}),
         }).filter((task) => !task.archived_at))
       }
       return {previous}
@@ -488,10 +464,13 @@ export function useProjects(selectedBoardId?: string) {
     onError: (_error,_variables,context) => {
       if (context?.previous) queryClient.setQueryData(['project_tasks',activeBoardId],context.previous)
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['project_tasks', activeBoardId] })
-      queryClient.invalidateQueries({queryKey:['project_tasks_workspace']})
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['project_tasks', activeBoardId] }),
+        queryClient.invalidateQueries({ queryKey: ['project_tasks_workspace'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['unified-inbox'] }),
+      ])
     }
   })
 

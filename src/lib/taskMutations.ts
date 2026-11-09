@@ -1,4 +1,5 @@
 import type { ProjectTask } from '@/types/database'
+import { labelBelongsToTask, parseTaskSharedMetadata, scopeTaskSharedMetadata, taskScopedLabelId } from '@/lib/taskMetadata'
 import {
   type ActivityEvent,
   type ActivityEventType,
@@ -20,6 +21,7 @@ import {
   type TaskReminder,
   type TaskStatus,
   type TaskStoreState,
+  type TaskSharedMetadata,
 } from '@/types/task'
 
 const VALID_STATUSES = new Set<TaskStatus>(['backlog', 'todo', 'in_progress', 'in_review', 'done'])
@@ -50,6 +52,7 @@ export class TaskDomainError extends Error {
 
 export type TaskMutation =
   | { type: 'seed_task'; task: TaskDetails }
+  | { type: 'hydrate_shared_metadata'; taskId: string; metadata?: TaskSharedMetadata; assigneeIds?: string[] }
   | { type: 'seed_comments'; taskId: string; comments: TaskComment[] }
   | { type: 'rollback_shared_task'; taskId: string; snapshot: TaskDetails; expectedVersion: number; activityId?: string }
   | { type: 'update_title'; taskId: string; title: string }
@@ -245,6 +248,7 @@ function normalizeSeedDate(value?: string | null): string | undefined {
 /** Convert the existing board entity without regenerating its stable task ID. */
 export function taskDetailsFromProjectTask(task: ProjectTask, options: ProjectTaskHydrationOptions = {}): TaskDetails {
   const createdAt = !Number.isNaN(Date.parse(task.created_at)) ? task.created_at : options.now ?? new Date().toISOString()
+  const metadata = parseTaskSharedMetadata(task.task_metadata)
   return {
     id: task.id,
     key: options.taskKey ?? `TASK-${task.id.slice(0, 8).toUpperCase()}`,
@@ -256,6 +260,7 @@ export function taskDetailsFromProjectTask(task: ProjectTask, options: ProjectTa
     status: options.status ?? inferStatus(options.columnName),
     priority: task.priority,
     assigneeIds: task.assignee_ids?.length ? Array.from(new Set(task.assignee_ids)) : task.assignee_id ? [task.assignee_id] : [],
+    // The shared metadata hydration imports label records and their references atomically.
     labelIds: [],
     estimate: typeof task.estimated_hours === 'number' && task.estimated_hours >= 0
       ? { value: task.estimated_hours, unit: 'hours' }
@@ -263,7 +268,7 @@ export function taskDetailsFromProjectTask(task: ProjectTask, options: ProjectTa
     startDate: normalizeSeedDate(task.start_date),
     dueDate: normalizeSeedDate(task.due_date),
     dependencyIds: [],
-    checklists: [],
+    checklists: metadata?.checklists ?? [],
     attachmentIds: [],
     commentIds: [],
     watcherIds: [],
@@ -394,6 +399,25 @@ export function applyTaskMutation(state: TaskStoreState, mutation: TaskMutation,
         revision: state.revision + 1,
         updatedAt: at,
       },
+    }
+  }
+
+  if (mutation.type === 'hydrate_shared_metadata') {
+    const task = requireTask(state, mutation.taskId)
+    const incoming = mutation.metadata ? scopeTaskSharedMetadata(task.id, mutation.metadata) : undefined
+    const next = {
+      ...task,
+      ...(incoming ? { labelIds: incoming.labels.map(label => label.id), checklists: incoming.checklists } : {}),
+      ...(mutation.assigneeIds !== undefined ? { assigneeIds: unique(mutation.assigneeIds) } : {}),
+    }
+    const labels = incoming ? { ...state.labels, ...Object.fromEntries(incoming.labels.map(label => [label.id, label])) } : state.labels
+    if (JSON.stringify(task.labelIds) === JSON.stringify(next.labelIds) && JSON.stringify(task.checklists) === JSON.stringify(next.checklists)
+      && JSON.stringify(task.assigneeIds) === JSON.stringify(next.assigneeIds)
+      && (!incoming || incoming.labels.every(label => JSON.stringify(state.labels[label.id]) === JSON.stringify(label)))) return unchanged(state, task.id)
+    const at = timestamp(context)
+    return {
+      changed: true, taskId: task.id,
+      state: { ...state, tasks: { ...state.tasks, [task.id]: { ...next, updatedAt: at, version: task.version + 1 } }, labels, revision: state.revision + 1, updatedAt: at },
     }
   }
 
@@ -631,8 +655,8 @@ export function applyTaskMutation(state: TaskStoreState, mutation: TaskMutation,
     case 'create_label': {
       const name = requireNonEmpty(mutation.name, 'Label name', 80)
       if (!VALID_LABEL_COLORS.has(mutation.color)) throw new TaskDomainError('Unsupported label color.', 'invalid_input')
-      if (Object.values(state.labels).some((label) => label.name.toLowerCase() === name.toLowerCase())) throw new TaskDomainError('A label with this name already exists.', 'duplicate')
-      const label: TaskLabel = { id: stableId('label', context), name, color: mutation.color, createdAt: at, updatedAt: at }
+      if (Object.values(state.labels).some(label => (task.labelIds.includes(label.id) || labelBelongsToTask(task.id, label.id)) && label.name.toLowerCase() === name.toLowerCase())) throw new TaskDomainError('A label with this name already exists.', 'duplicate')
+      const label: TaskLabel = { id: taskScopedLabelId(task.id, stableId('label', context)), name, color: mutation.color, createdAt: at, updatedAt: at }
       return commit(state, { ...task, labelIds: [...task.labelIds, label.id] }, context, at, event(context, task.id, 'label_created', at, undefined, label, { labelId: label.id }), {
         labels: { ...state.labels, [label.id]: label },
       }, { entityId: label.id })
@@ -640,30 +664,36 @@ export function applyTaskMutation(state: TaskStoreState, mutation: TaskMutation,
     case 'update_label': {
       const label = state.labels[mutation.labelId]
       if (!label) throw new TaskDomainError('Label was not found.', 'not_found')
+      if (!task.labelIds.includes(label.id) && !labelBelongsToTask(task.id, label.id)) throw new TaskDomainError('This label belongs to another task.', 'permission_denied')
+      const scopedId = taskScopedLabelId(task.id, label.id)
       const name = mutation.patch.name === undefined ? label.name : requireNonEmpty(mutation.patch.name, 'Label name', 80)
       const color = mutation.patch.color ?? label.color
       if (!VALID_LABEL_COLORS.has(color)) throw new TaskDomainError('Unsupported label color.', 'invalid_input')
-      if (Object.values(state.labels).some((item) => item.id !== label.id && item.name.toLowerCase() === name.toLowerCase())) throw new TaskDomainError('A label with this name already exists.', 'duplicate')
+      if (Object.values(state.labels).some(item => item.id !== label.id && item.id !== scopedId && (task.labelIds.includes(item.id) || labelBelongsToTask(task.id, item.id)) && item.name.toLowerCase() === name.toLowerCase())) throw new TaskDomainError('A label with this name already exists.', 'duplicate')
       if (name === label.name && color === label.color) return unchanged(state, task.id)
-      const updated = { ...label, name, color, updatedAt: at }
-      return commit(state, task, context, at, event(context, task.id, 'label_updated', at, label, updated, { labelId: label.id }), {
-        labels: { ...state.labels, [label.id]: updated },
-      }, { entityId: label.id })
+      const updated = { ...label, id: scopedId, name, color, updatedAt: at }
+      const next = { ...task, labelIds: task.labelIds.map(id => id === label.id ? scopedId : id) }
+      return commit(state, next, context, at, event(context, task.id, 'label_updated', at, label, updated, { labelId: scopedId }), {
+        labels: { ...state.labels, [scopedId]: updated },
+      }, { entityId: scopedId })
     }
     case 'delete_label': {
       const label = state.labels[mutation.labelId]
       if (!label) throw new TaskDomainError('Label was not found.', 'not_found')
+      if (!task.labelIds.includes(label.id) && !labelBelongsToTask(task.id, label.id)) throw new TaskDomainError('This label belongs to another task.', 'permission_denied')
       const labels = { ...state.labels }
-      delete labels[label.id]
-      const tasks = Object.fromEntries(Object.values(state.tasks).map((item) => [item.id, item.labelIds.includes(label.id)
-        ? { ...item, labelIds: item.labelIds.filter((id) => id !== label.id), updatedAt: at, version: item.version + (item.id === task.id ? 0 : 1) }
-        : item]))
-      return commit(state, { ...task, labelIds: task.labelIds.filter((id) => id !== label.id) }, context, at, event(context, task.id, 'label_deleted', at, label, undefined, { labelId: label.id }), { labels, tasks }, { entityId: label.id })
+      if (!Object.values(state.tasks).some(item => item.id !== task.id && item.labelIds.includes(label.id))) delete labels[label.id]
+      return commit(state, { ...task, labelIds: task.labelIds.filter(id => id !== label.id) }, context, at, event(context, task.id, 'label_deleted', at, label, undefined, { labelId: label.id }), { labels }, { entityId: label.id })
     }
     case 'add_label': {
-      if (!state.labels[mutation.labelId]) throw new TaskDomainError('Label was not found.', 'not_found')
-      if (task.labelIds.includes(mutation.labelId)) return unchanged(state, task.id)
-      return commit(state, { ...task, labelIds: [...task.labelIds, mutation.labelId] }, context, at, event(context, task.id, 'label_added', at, undefined, mutation.labelId))
+      const label = state.labels[mutation.labelId]
+      if (!label) throw new TaskDomainError('Label was not found.', 'not_found')
+      if (task.labelIds.some(id => state.labels[id]?.name.toLowerCase() === label.name.toLowerCase())) return unchanged(state, task.id)
+      let scopedId = taskScopedLabelId(task.id, label.id)
+      if (state.labels[scopedId] && state.labels[scopedId].name.toLowerCase() !== label.name.toLowerCase()) scopedId = taskScopedLabelId(task.id, stableId('label', context))
+      return commit(state, { ...task, labelIds: [...task.labelIds, scopedId] }, context, at, event(context, task.id, 'label_added', at, undefined, scopedId), {
+        labels: { ...state.labels, [scopedId]: { ...label, id: scopedId } },
+      })
     }
     case 'remove_label': {
       if (!task.labelIds.includes(mutation.labelId)) return unchanged(state, task.id)

@@ -25,7 +25,7 @@ describe('InteractiveCalendar', () => {
     render(<InteractiveCalendar tasks={[task]} boards={[board]} columns={[column]} profiles={[]} onCreateTask={createTask} onOpenTask={vi.fn()} />)
     expect(screen.getByText('1 task due Feb 29')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /add task for this day/i }))
-    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Prepare release' } })
+    fireEvent.change(screen.getByLabelText('Task title'), { target: { value: 'Prepare release' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create task' }))
     await vi.waitFor(() => expect(createTask).toHaveBeenCalledWith(expect.objectContaining({ dueDate: '2024-02-29', title: 'Prepare release' })))
   })

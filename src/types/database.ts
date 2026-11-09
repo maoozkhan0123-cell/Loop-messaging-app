@@ -1,3 +1,5 @@
+import type { TaskSharedMetadata } from './task'
+
 export type Profile = {
   id: string
   display_name: string
@@ -125,6 +127,10 @@ export type ProjectTask = {
   version?: number
   updated_at?: string
   updated_by?: string | null
+  /** Durable task labels, added by the task creation migration. */
+  labels?: string[]
+  /** Rich shared labels and checklists; legacy rows use an empty object. */
+  task_metadata?: TaskSharedMetadata | Record<string, unknown>
   /** Every assignee (project_task_assignees); assignee_id is the primary one. */
   assignee_ids?: string[]
   assignee?: Profile

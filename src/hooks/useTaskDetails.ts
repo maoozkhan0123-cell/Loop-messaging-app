@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ProjectTask } from "@/types/database";
+import { labelBelongsToTask, parseTaskSharedMetadata } from "@/lib/taskMetadata";
 import {
   applyTaskMutation,
   TaskDomainError,
@@ -209,7 +210,7 @@ export class TaskDetailsStore {
       const previous = this.snapshot.state;
       const result = applyTaskMutation(previous, mutation, context);
       if (!result.changed) {
-        this.emit({ ...this.snapshot, mutationError: undefined });
+        if (this.snapshot.mutationError) this.emit({ ...this.snapshot, mutationError: undefined });
         return { ok: true, result };
       }
       if (this.taskStorageUnavailable) {
@@ -371,9 +372,11 @@ export interface UseTaskDetailsOptions extends ProjectTaskHydrationOptions {
   actorId?: string;
   canManageAllComments?: boolean;
   store?: TaskDetailsStore;
+  skipSharedMetadataHydration?: boolean;
   onTaskChange?: (
     task: TaskDetails | undefined,
     mutation: TaskMutation,
+    state: TaskStoreState,
   ) => void | Promise<void>;
 }
 
@@ -384,7 +387,7 @@ export interface UseTaskDetailsResult {
   dependencies: TaskDependency[];
   /** Labels assigned to the current task. */
   labels: TaskLabel[];
-  /** Workspace label catalog, including labels not assigned to this task. */
+  /** This task's label catalog, including labels previously removed from it. */
   allLabels: TaskLabel[];
   attachments: TaskAttachment[];
   trash: TaskTrashEntry[];
@@ -545,6 +548,11 @@ export function useTaskDetails(
   const actorId =
     options.actorId?.trim() || projectTask?.created_by || "local-user";
   const taskId = projectTask?.id;
+  const sharedSignature = JSON.stringify({
+    metadata: parseTaskSharedMetadata(projectTask?.task_metadata),
+    assigneeIds: projectTask?.assignee_ids,
+  });
+  const hydratedShared = useRef<{ store: TaskDetailsStore; taskId: string; signature: string } | undefined>(undefined);
   const trashed = taskId
     ? Object.values(snapshot.state.trash).some(
         (entry) => entry.task.id === taskId,
@@ -566,6 +574,14 @@ export function useTaskDetails(
     canManageAllComments,
     trashed,
   ]);
+  useEffect(() => {
+    if (!snapshot.hydrated || !taskId || trashed || options.skipSharedMetadataHydration) return;
+    if (hydratedShared.current?.store === store && hydratedShared.current.taskId === taskId && hydratedShared.current.signature === sharedSignature) return;
+    const incoming = JSON.parse(sharedSignature) as { metadata?: import('@/types/task').TaskSharedMetadata; assigneeIds?: string[] };
+    if (!incoming.metadata && incoming.assigneeIds === undefined) return;
+    const outcome = store.dispatch({ type: 'hydrate_shared_metadata', taskId, ...incoming }, { actorId, canManageAllComments });
+    if (outcome.ok) hydratedShared.current = { store, taskId, signature: sharedSignature };
+  }, [store, snapshot.hydrated, taskId, trashed, sharedSignature, options.skipSharedMetadataHydration, actorId, canManageAllComments]);
   // Hydration and the seed mutation happen in consecutive effects. Keep the
   // shared ProjectTask seed available during that hand-off (and when storage
   // is unavailable) so the workspace never flashes back to an empty task.
@@ -585,6 +601,7 @@ export function useTaskDetails(
         void onTaskChange(
           nextTaskId ? outcome.result.state.tasks[nextTaskId] : undefined,
           mutation,
+          outcome.result.state,
         );
       }
       return outcome;
@@ -653,7 +670,7 @@ export function useTaskDetails(
     activity,
     dependencies,
     labels,
-    allLabels: Object.values(snapshot.state.labels).sort((a, b) =>
+    allLabels: Object.values(snapshot.state.labels).filter(label => task && (task.labelIds.includes(label.id) || labelBelongsToTask(task.id, label.id))).sort((a, b) =>
       a.name.localeCompare(b.name),
     ),
     attachments,

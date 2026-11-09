@@ -6,6 +6,7 @@ import { useProjects, useTaskComments } from '@/hooks/useProjects'
 import { useAllProfiles } from '@/hooks/useProfiles'
 import { useProfile } from '@/hooks/useProfile'
 import type { ProjectTask } from '@/types/database'
+import { parseTaskSharedMetadata } from '@/lib/taskMetadata'
 
 /** Shows the full task workspace (details + comments/activity) as a page in the content area. */
 export function InboxTaskDetail({ task: initialTask, onClose }: { task: ProjectTask; onClose: () => void }) {
@@ -44,6 +45,9 @@ export function InboxTaskDetail({ task: initialTask, onClose }: { task: ProjectT
         description: source.description || undefined,
         priority: source.priority,
         assigneeId: source.assignee_id || undefined,
+        assigneeIds: source.assignee_ids,
+        labels: source.labels,
+        taskMetadata: parseTaskSharedMetadata(source.task_metadata),
         dueDate: source.due_date || undefined,
         startDate: source.start_date || undefined,
         estimatedHours: source.estimated_hours ?? undefined,

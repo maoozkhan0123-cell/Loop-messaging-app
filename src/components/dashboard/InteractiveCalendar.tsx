@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react'
 import { addDays, addMonths, endOfDay, format, isSameDay, isSameMonth, startOfDay, startOfMonth, subMonths } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import * as Dialog from '@radix-ui/react-dialog'
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { CreateTaskDialog } from '@/components/tasks/CreateTaskDialog'
 import { calendarDayKey, eventOccurrences, getMondayFirstCalendarGrid, parseCalendarDate } from '@/lib/calendar'
-import type { Profile, ProjectBoard, ProjectColumn, ProjectTask, TaskPriority, WorkspaceEvent } from '@/types/database'
+import type { Profile, ProjectBoard, ProjectColumn, ProjectTask, WorkspaceEvent } from '@/types/database'
 import type { CreateDashboardTaskInput } from '@/hooks/useDashboard'
 
 type InteractiveCalendarProps = {
@@ -110,22 +110,7 @@ export function InteractiveCalendar({ tasks, events = [], meId, boards, columns,
         <button type="button" onClick={() => setCreateOpen(true)} disabled={!boards.length || !columns.length} className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-[var(--primary)] text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><Plus size={13} />Add task for this day</button>
       </div>
 
-      <TaskDialog open={createOpen} onOpenChange={setCreateOpen} selectedDate={selectedDate} boards={boards} columns={columns} profiles={profiles} meId={meId} creating={creating} onCreate={onCreateTask} />
+      <CreateTaskDialog open={createOpen} onOpenChange={setCreateOpen} selectedDate={selectedDate} boards={boards} columns={columns} profiles={profiles} meId={meId} creating={creating} onCreate={onCreateTask} availableLabels={Array.from(new Set(tasks.flatMap(task => task.labels ?? [])))} />
     </section>
   )
 }
-
-function TaskDialog({ open, onOpenChange, selectedDate, boards, columns, profiles, meId, creating, onCreate }: { open: boolean; onOpenChange: (open: boolean) => void; selectedDate: Date; boards: ProjectBoard[]; columns: ProjectColumn[]; profiles: Profile[]; meId?: string; creating?: boolean; onCreate: (input: CreateDashboardTaskInput) => Promise<unknown> }) {
-  const [boardId, setBoardId] = useState(boards[0]?.id ?? '')
-  const [title, setTitle] = useState(''); const [description, setDescription] = useState(''); const [priority, setPriority] = useState<TaskPriority>('medium'); const [assigneeId, setAssigneeId] = useState(meId ?? ''); const [error, setError] = useState<string | null>(null)
-  const boardColumns = columns.filter((column) => column.board_id === boardId).sort((a,b) => a.position-b.position)
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault(); setError(null)
-    const columnId = boardColumns[0]?.id
-    if (!title.trim() || !boardId || !columnId) { setError('Select a project and enter a task title.'); return }
-    try { await onCreate({ boardId, columnId, title, description, priority, assigneeId: assigneeId || undefined, dueDate: calendarDayKey(selectedDate) }); setTitle(''); setDescription(''); onOpenChange(false) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Task could not be created.') }
-  }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[120] bg-black/50" /><Dialog.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-[121] w-[min(480px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[var(--ui-border)] bg-[var(--surface)] p-5 shadow-2xl"><div className="flex items-start justify-between"><div><Dialog.Title className="text-lg font-semibold">New task</Dialog.Title><p className="mt-1 text-xs text-[var(--muted-foreground)]">Due {format(selectedDate, 'EEEE, MMMM d, yyyy')}</p></div><Dialog.Close aria-label="Close task form" className="rounded-md p-1.5 hover:bg-[var(--surface-muted)]"><X size={17} /></Dialog.Close></div><form onSubmit={(event) => void submit(event)} className="mt-5 space-y-3">{error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}<Field label="Title"><input required value={title} onChange={(e) => setTitle(e.target.value)} className="member-input" autoFocus /></Field><Field label="Description"><textarea value={description} onChange={(e) => setDescription(e.target.value)} className="member-input min-h-20 py-2" /></Field><div className="grid grid-cols-2 gap-3"><Field label="Project"><select value={boardId} onChange={(e) => setBoardId(e.target.value)} className="member-input">{boards.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}</select></Field><Field label="Priority"><select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)} className="member-input"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></Field></div><Field label="Assignee"><select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="member-input"><option value="">Unassigned</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.id === meId ? `${profile.display_name} (me)` : profile.display_name}</option>)}</select></Field><div className="flex justify-end gap-2 pt-2"><Dialog.Close className="h-9 rounded-md border border-[var(--ui-border)] px-4 text-xs font-semibold">Cancel</Dialog.Close><button disabled={creating} className="h-9 rounded-md bg-[var(--primary)] px-4 text-xs font-semibold text-white disabled:opacity-60">{creating ? 'Creating…' : 'Create task'}</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block text-xs font-semibold text-[var(--foreground)]">{label}<div className="mt-1.5">{children}</div></label> }

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import { TaskDetailModal } from './TaskDetailModal'
 import type { Profile, ProjectBoard, ProjectColumn, ProjectTask } from '@/types/database'
+import { createTaskSharedMetadata } from '@/lib/taskMetadata'
 
 class ResizeObserverStub {
   observe() {}
@@ -17,6 +18,22 @@ const boards:ProjectBoard[]=[{id:'board-1',name:'Product',description:null,creat
 const profile:Profile={id:'user-1',display_name:'Ada Lovelace',email:'ada@example.com',avatar_url:null,job_title:'Engineer',status:'online',created_at:createdAt}
 
 describe('TaskDetailModal',() => {
+  it('hydrates shared creation details and persists checklist edits to the server', async () => {
+    localStorage.clear()
+    const metadata = createTaskSharedMetadata(['Launch'], [{ label: 'Verify the deployment' }], createdAt)
+    const sharedTask = { ...task, id: 'shared-modal-task', labels: ['Launch'], task_metadata: metadata }
+    const onUpdate = vi.fn().mockResolvedValue(sharedTask)
+    render(<TaskDetailModal task={sharedTask} columns={columns} boards={boards} availableTasks={[sharedTask]} teamProfiles={[profile]} currentProfile={profile} initialComments={[]} onClose={vi.fn()} onUpdate={onUpdate} onDelete={vi.fn().mockResolvedValue(undefined)} onDuplicate={vi.fn().mockResolvedValue(sharedTask)} onMove={vi.fn().mockResolvedValue(sharedTask)} onAddComment={vi.fn()}/>)
+    expect(await screen.findByRole('checkbox', { name: 'Mark Verify the deployment complete' })).not.toBeChecked()
+    expect((await screen.findAllByText('Launch')).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Mark Verify the deployment complete' }))
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: sharedTask.id,
+      labels: ['Launch'],
+      taskMetadata: expect.objectContaining({ checklists: [expect.objectContaining({ items: [expect.objectContaining({ completed: true })] })] }),
+    })))
+  })
+
   it('renders the integrated workspace and opens real task actions',async () => {
     localStorage.clear()
     const onUpdate=vi.fn().mockResolvedValue(task)

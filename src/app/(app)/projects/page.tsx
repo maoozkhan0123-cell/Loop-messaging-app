@@ -12,9 +12,12 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
-  User,
 } from 'lucide-react'
-import { Avatar } from '@/components/ui/Avatar'
+import { CreateTaskDialog } from '@/components/tasks/CreateTaskDialog'
+import { TaskAssignees } from '@/components/tasks/TaskAssignees'
+import { TaskCardSummary } from '@/components/tasks/TaskCardSummary'
+import { parseTaskSharedMetadata } from '@/lib/taskMetadata'
+import { parseCalendarDate } from '@/lib/calendar'
 import { GanttChart, ViewSwitcher, type WorkView } from '@/components/ui/WorkViews'
 import { useProjects, useTaskComments } from '@/hooks/useProjects'
 import { TaskDetailModal as EnterpriseTaskDetailModal } from '@/components/task-details/TaskDetailModal'
@@ -85,11 +88,6 @@ function ProjectsPageContent() {
 
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
   const [targetColumnId, setTargetColumnId] = useState<string>('')
-  const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskDesc, setNewTaskDesc] = useState('')
-  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium')
-  const [newTaskAssignee, setNewTaskAssignee] = useState<string>('')
-  const [newTaskDueDate, setNewTaskDueDate] = useState<string>('')
 
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null)
   const { data: existingTaskComments = [] } = useTaskComments(selectedTask?.id)
@@ -152,26 +150,6 @@ function ProjectsPageContent() {
     setShowNewColumnModal(false)
   }
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newTaskTitle.trim() || !activeBoardId || !targetColumnId) return
-    await createTask({
-      boardId: activeBoardId,
-      columnId: targetColumnId,
-      title: newTaskTitle.trim(),
-      description: newTaskDesc.trim(),
-      priority: newTaskPriority,
-      assigneeId: newTaskAssignee || undefined,
-      dueDate: newTaskDueDate || undefined
-    })
-    setNewTaskTitle('')
-    setNewTaskDesc('')
-    setNewTaskPriority('medium')
-    setNewTaskAssignee('')
-    setNewTaskDueDate('')
-    setShowNewTaskModal(false)
-  }
-
   const handleDuplicateTask = async (source: ProjectTask, newTaskId?: string) => {
     return createTask({
       id: newTaskId,
@@ -181,6 +159,9 @@ function ProjectsPageContent() {
       description: source.description || undefined,
       priority: source.priority,
       assigneeId: source.assignee_id || undefined,
+      assigneeIds: source.assignee_ids,
+      labels: source.labels,
+      taskMetadata: parseTaskSharedMetadata(source.task_metadata),
       dueDate: source.due_date || undefined,
       startDate:source.start_date||undefined,
       estimatedHours:source.estimated_hours??undefined,
@@ -337,7 +318,7 @@ function ProjectsPageContent() {
         ) : workView === 'list' ? (
           <div className="h-full overflow-y-auto rounded-xl border border-[var(--ui-border)] bg-[var(--surface)]">
             <div className="grid min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] border-b border-[var(--ui-border)] bg-[var(--surface-raised)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]"><span>Task</span><span>Status</span><span>Priority</span><span>Assignee</span><span>Due</span></div>
-            {filteredTasks.map((task) => <button key={task.id} type="button" onClick={() => openTask(task)} className="grid w-full min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] items-center border-b border-[var(--ui-border)] px-4 py-3 text-left last:border-b-0 hover:bg-[var(--surface-muted)]"><span className="min-w-0"><strong className="block truncate text-xs">{task.title}</strong><span className="block truncate text-[10px] text-[var(--muted-foreground)]">{task.description || 'No description'}</span></span><span className="text-xs text-[var(--muted-foreground)]">{columns.find((column) => column.id === task.column_id)?.name || 'Unknown'}</span><span><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: PRIORITY_CONFIG[task.priority].bg, color: PRIORITY_CONFIG[task.priority].text }}>{PRIORITY_CONFIG[task.priority].label}</span></span><span className="flex items-center gap-2 text-xs">{task.assignee ? <><Avatar src={task.assignee.avatar_url} name={task.assignee.display_name} size={24}/><span className="truncate">{task.assignee.display_name}</span></> : <span className="text-[var(--muted-foreground)]">Unassigned</span>}</span><span className="text-xs text-[var(--muted-foreground)]">{task.due_date ? new Date(task.due_date).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '—'}</span></button>)}
+            {filteredTasks.map((task) => <button key={task.id} type="button" onClick={() => openTask(task)} className="grid w-full min-w-[720px] grid-cols-[minmax(260px,1fr)_150px_110px_150px_90px] items-center border-b border-[var(--ui-border)] px-4 py-3 text-left last:border-b-0 hover:bg-[var(--surface-muted)]"><span className="min-w-0"><strong className="block truncate text-xs">{task.title}</strong><span className="block truncate text-[10px] text-[var(--muted-foreground)]">{task.description || 'No description'}</span><TaskCardSummary task={task} className="mt-1" /></span><span className="text-xs text-[var(--muted-foreground)]">{columns.find((column) => column.id === task.column_id)?.name || 'Unknown'}</span><span><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: PRIORITY_CONFIG[task.priority].bg, color: PRIORITY_CONFIG[task.priority].text }}>{PRIORITY_CONFIG[task.priority].label}</span></span><span className="flex items-center gap-2 text-xs"><TaskAssignees task={task} profiles={teamProfiles} showNames /></span><span className="text-xs text-[var(--muted-foreground)]">{task.due_date ? parseCalendarDate(task.due_date)?.toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '—'}</span></button>)}
             {!filteredTasks.length && <div className="grid min-h-48 place-items-center text-sm text-[var(--muted-foreground)]">No tasks match your filters.</div>}
           </div>
         ) : workView === 'gantt' ? (
@@ -443,6 +424,7 @@ function ProjectsPageContent() {
                               </div>
                             </div>
 
+                            <TaskCardSummary task={task} className="mb-2" />
                             {/* Task Title */}
                             <h5 className="text-xs font-bold text-[#0D1F31] mb-1 line-clamp-2">
                               {task.title}
@@ -461,7 +443,7 @@ function ProjectsPageContent() {
                                 {task.due_date && (
                                   <span className="flex items-center gap-1 text-[#475569] font-medium">
                                     <Calendar size={12} className="text-[#94A3B8]" />
-                                    {new Date(task.due_date).toLocaleDateString(undefined, {
+                                    {parseCalendarDate(task.due_date)?.toLocaleDateString(undefined, {
                                       month: 'short',
                                       day: 'numeric'
                                     })}
@@ -476,18 +458,7 @@ function ProjectsPageContent() {
                                 )}
                               </div>
 
-                              {/* Assignee Avatar */}
-                              {task.assignee ? (
-                                <Avatar
-                                  src={task.assignee.avatar_url}
-                                  name={task.assignee.display_name}
-                                  size={22}
-                                />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full bg-[#F1F5F9] border border-[#CBD5E1] flex items-center justify-center text-[#94A3B8]">
-                                  <User size={10} />
-                                </div>
-                              )}
+                              <TaskAssignees task={task} profiles={teamProfiles} size={22} />
                             </div>
                           </div>
                         )
@@ -610,109 +581,22 @@ function ProjectsPageContent() {
         </div>
       )}
 
-      {/* MODAL: New Task */}
-      {showNewTaskModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#E5E7EB]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-[#0D1F31]">Create New Task</h3>
-              <button
-                onClick={() => setShowNewTaskModal(false)}
-                className="text-[#9CA3AF] hover:text-[#0D1F31]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleCreateTask} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#4B5563] mb-1">Task Title *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Implement OAuth Login"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#3B82F6]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#4B5563] mb-1">Description</label>
-                <textarea
-                  placeholder="Task details and sub-requirements..."
-                  rows={3}
-                  value={newTaskDesc}
-                  onChange={(e) => setNewTaskDesc(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#3B82F6]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#4B5563] mb-1">Priority</label>
-                  <select
-                    value={newTaskPriority}
-                    onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
-                    className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#3B82F6] bg-white"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#4B5563] mb-1">Assignee</label>
-                  <select
-                    value={newTaskAssignee}
-                    onChange={(e) => setNewTaskAssignee(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#3B82F6] bg-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {currentProfile && (
-                      <option value={currentProfile.id}>
-                        {currentProfile.display_name} (You)
-                      </option>
-                    )}
-                    {teamProfiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#4B5563] mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={newTaskDueDate}
-                  onChange={(e) => setNewTaskDueDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#3B82F6] bg-white"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNewTaskModal(false)}
-                  className="px-3.5 py-1.5 text-xs font-semibold text-[#4B5563] hover:bg-[#F3F4F6] rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#1E40AF] hover:bg-[#1D4ED8] rounded-lg shadow-xs"
-                >
-                  Create Task
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <CreateTaskDialog
+        open={showNewTaskModal}
+        onOpenChange={setShowNewTaskModal}
+        boards={boards}
+        columns={workspaceColumns.length ? workspaceColumns : columns}
+        profiles={Array.from(new Map([...(currentProfile ? [currentProfile] : []), ...teamProfiles].map(profile => [profile.id, profile])).values())}
+        meId={currentProfile?.id}
+        defaultBoardId={activeBoardId}
+        defaultColumnId={targetColumnId}
+        availableLabels={Array.from(new Set(workspaceTasks.flatMap(task => task.labels ?? [])))}
+        onCreate={async (input) => {
+          const task = await createTask(input)
+          if (task.board_id !== activeBoardId) handleBoardChange(task.board_id)
+          return task
+        }}
+      />
 
       {/* MODAL: Task Detail & Comments */}
       {selectedTask && (
