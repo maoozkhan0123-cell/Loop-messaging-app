@@ -13,9 +13,12 @@ interface ThreadPanelProps {
   channelId: string
   currentUserId: string
   onClose: () => void
+  onCreateTask?: (message: MessageType) => void
+  linkedContext?: MessageType[]
+  highlightMessageId?: string
 }
 
-export function ThreadPanel({ message, channelId, currentUserId, onClose }: ThreadPanelProps) {
+export function ThreadPanel({ message, channelId, currentUserId, onClose, onCreateTask, linkedContext, highlightMessageId }: ThreadPanelProps) {
   const queryClient = useQueryClient()
   const subscribe = useCallback((notify: () => void) => queryClient.getQueryCache().subscribe(notify), [queryClient])
   const getMessage = useCallback(() => queryClient.getQueryData<InfiniteData<MessageType[]>>(['messages', channelId, null])?.pages.flat().find((item) => item.id === message.id) ?? message, [queryClient, channelId, message])
@@ -45,6 +48,7 @@ export function ThreadPanel({ message, channelId, currentUserId, onClose }: Thre
           channelId={channelId}
           currentUserId={currentUserId}
           showHeader={true}
+          onCreateTask={onCreateTask}
         />
       </div>
 
@@ -58,6 +62,9 @@ export function ThreadPanel({ message, channelId, currentUserId, onClose }: Thre
           channelId={channelId}
           currentUserId={currentUserId}
           parentId={message.id}
+          onCreateTask={onCreateTask}
+          linkedContext={linkedContext}
+          highlightMessageId={highlightMessageId}
         />
       </div>
 

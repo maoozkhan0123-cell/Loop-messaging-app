@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import { formatMessageTime, formatShortTime, groupReactions, isImageMime, formatFileSize, cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
-import { Pencil, Trash2, Paperclip, Download, Check, ChevronRight, Plus, Play, Pause, Mic, Bookmark, Copy, Link2 } from 'lucide-react'
+import { Pencil, Trash2, Paperclip, Download, Check, ChevronRight, Plus, Play, Pause, Mic, Bookmark, Copy, Link2, ListPlus } from 'lucide-react'
+import { messagePermalink } from '@/lib/messageTask'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { formatMessage } from '@/lib/formatMessage'
 import type { Message as MessageType, Attachment } from '@/types/database'
@@ -24,10 +25,11 @@ interface MessageProps {
   currentUserId: string
   showHeader: boolean
   onThreadOpen?: (message: MessageType) => void
+  onCreateTask?: (message: MessageType) => void
 }
 
 export const Message = memo(function Message({
-  message, channelId, currentUserId, showHeader, onThreadOpen,
+  message, channelId, currentUserId, showHeader, onThreadOpen, onCreateTask,
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editBody, setEditBody] = useState(message.body ?? '')
@@ -62,8 +64,7 @@ export const Message = memo(function Message({
 
   const copyText = () => { if (message.body) void navigator.clipboard.writeText(message.body) }
   const copyLink = () => {
-    const kind = location.pathname.startsWith('/dm/') ? 'dm' : 'channel'
-    void navigator.clipboard.writeText(`${location.origin}/${kind}/${channelId}?message=${message.id}`)
+    void navigator.clipboard.writeText(messagePermalink(channelId, message.id, location.pathname.startsWith('/dm/'), location.origin))
   }
 
   const isOwn = message.user_id === currentUserId
@@ -127,6 +128,9 @@ export const Message = memo(function Message({
         )}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        tabIndex={onCreateTask ? 0 : undefined}
+        onFocusCapture={() => setHovered(true)}
+        onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHovered(false) }}
       >
         <div className="flex items-start gap-2.5">
           {/* Avatar column */}
@@ -254,10 +258,12 @@ export const Message = memo(function Message({
           </div>
         </div>
 
+        {onCreateTask && !isEditing && <button type="button" onClick={() => onCreateTask(message)} aria-label="Create task from message" className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[#6B7280] hover:bg-[#EBF5FF] hover:text-[#3589FA] md:hidden"><ListPlus size={13} />Create task</button>}
+
         {/* ── Hover action toolbar: 5 quick emojis + edit/delete ── */}
         {hovered && !isEditing && (
           <div
-            className="absolute right-4 -top-4 flex items-center bg-white border border-[#E5E7EB] rounded-xl shadow-md px-1.5 py-0.5 z-10 gap-0.5"
+            className="absolute right-4 -top-4 flex max-w-[calc(100vw-32px)] flex-wrap items-center bg-white border border-[#E5E7EB] rounded-xl shadow-md px-1.5 py-0.5 z-10 gap-0.5"
           >
             {/* Quick reactions */}
             {QUICK_REACTIONS.map((emoji) => (
@@ -303,6 +309,7 @@ export const Message = memo(function Message({
             <ActionBtn label="Copy message link" onClick={copyLink}>
               <Link2 size={13} />
             </ActionBtn>
+            {onCreateTask && <span className="hidden md:block"><ActionBtn label="Create task from message" onClick={() => onCreateTask(message)}><ListPlus size={14} /></ActionBtn></span>}
 
             {/* Edit — own messages */}
             {isOwn && (
@@ -345,6 +352,7 @@ function ActionBtn({ label, onClick, children, danger, active }: { label: string
       <Tooltip.Trigger asChild>
         <button
           type="button"
+          aria-label={label}
           onClick={onClick}
           className={cn(
             'w-7 h-7 flex items-center justify-center rounded-lg transition-colors',

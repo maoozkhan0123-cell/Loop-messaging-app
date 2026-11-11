@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toaster'
 import type { CreateDashboardTaskInput } from '@/hooks/useDashboard'
 import { calendarDayKey } from '@/lib/calendar'
 import type { Profile, ProjectBoard, ProjectColumn, TaskPriority } from '@/types/database'
+import type { MessageTaskSource } from '@/lib/messageTask'
 
 export type CreateTaskDialogProps = {
   open: boolean
@@ -22,6 +23,9 @@ export type CreateTaskDialogProps = {
   defaultBoardId?: string
   defaultColumnId?: string
   availableLabels?: string[]
+  defaultTitle?: string
+  defaultDescription?: string
+  sourceMessage?: MessageTaskSource
 }
 
 type ChecklistDraft = { id: number; label: string; completed: boolean }
@@ -34,13 +38,13 @@ export function CreateTaskDialog(props: CreateTaskDialogProps) {
   )
 }
 
-function TaskForm({ onOpenChange, selectedDate, boards, columns, profiles, meId, creating = false, onCreate, defaultBoardId, defaultColumnId, availableLabels = [] }: CreateTaskDialogProps) {
+function TaskForm({ onOpenChange, selectedDate, boards, columns, profiles, meId, creating = false, onCreate, defaultBoardId, defaultColumnId, availableLabels = [], defaultTitle = '', defaultDescription = '', sourceMessage }: CreateTaskDialogProps) {
   const { toast } = useToast()
   const errorId = useId()
   const [boardId, setBoardId] = useState(defaultBoardId ?? boards[0]?.id ?? '')
   const [columnId, setColumnId] = useState(defaultColumnId ?? '')
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [title, setTitle] = useState(defaultTitle)
+  const [description, setDescription] = useState(defaultDescription)
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState(() => calendarDayKey(selectedDate ?? new Date()))
@@ -146,6 +150,12 @@ function TaskForm({ onOpenChange, selectedDate, boards, columns, profiles, meId,
             <fieldset disabled={busy} className="grid min-w-0 gap-6 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_240px]">
               <legend className="sr-only">Task details</legend>
               <div className="min-w-0 space-y-6">
+                {sourceMessage && <section aria-label="Source message" className="rounded-xl border border-[var(--ui-border)] bg-[var(--surface-muted)] p-3 text-xs">
+                  <p className="font-semibold">From {sourceMessage.author} · {sourceMessage.conversation}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-[var(--muted-foreground)]">{sourceMessage.excerpt.slice(0, 500)}{sourceMessage.excerpt.length > 500 ? '…' : ''}</p>
+                  <a href={sourceMessage.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold text-[var(--primary)] underline">Open source message</a>
+                  <p className="mt-2 leading-relaxed text-[var(--muted-foreground)]">Copied message context will be readable by people who can view this task in the selected project. The source conversation keeps its existing access rules.</p>
+                </section>}
                 <Field label="Task title"><input autoFocus required maxLength={240} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What needs to be done?" className="member-input" /></Field>
                 <Field label="Description"><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add context, requirements, or a useful link…" rows={3} className="member-input min-h-24 resize-y py-2.5" /></Field>
 

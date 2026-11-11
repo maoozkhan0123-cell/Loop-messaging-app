@@ -37,4 +37,15 @@ describe('MessageList history', () => {
     await waitFor(() => expect(log.scrollTop).toBe(560))
     expect(mocks.fetchNextPage).toHaveBeenCalledOnce()
   })
+
+  it('focuses an old linked context instead of appending it to the latest feed or crawling history', () => {
+    const target = { ...message('Linked old message', '2025-01-01T12:00:00Z'), channel_id: 'channel', parent_id: null } as Message
+    render(<MessageList channelId="channel" currentUserId="me" linkedContext={[target]} highlightMessageId={target.id} />)
+    expect(screen.getAllByRole('article').map((item) => item.textContent)).toEqual(['Linked old message'])
+    const linked = document.querySelector(`[data-message-id="${target.id}"]`)
+    expect(linked).toHaveFocus()
+    expect(linked).toHaveClass('ring-2')
+    fireEvent.scroll(screen.getByRole('log'))
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled()
+  })
 })

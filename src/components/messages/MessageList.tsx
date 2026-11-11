@@ -12,22 +12,26 @@ interface MessageListProps {
   channelId: string
   currentUserId: string
   onThreadOpen?: (message: MessageType) => void
+  onCreateTask?: (message: MessageType) => void
+  linkedContext?: MessageType[]
+  highlightMessageId?: string
   parentId?: string
   searchQuery?: string
   /** Shown above the first message, e.g. a channel welcome. */
   intro?: ReactNode
 }
 
-export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, searchQuery, intro }: MessageListProps) {
+export function MessageList({ channelId, currentUserId, onThreadOpen, onCreateTask, parentId, searchQuery, intro, linkedContext, highlightMessageId }: MessageListProps) {
   const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useMessages(channelId, parentId, currentUserId)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const focusedMessageRef = useRef<string | null>(null)
   const [showJump, setShowJump] = useState(false)
 
-  const allMessages = data?.pages.slice().reverse().flatMap((page) => page) ?? []
+  const allMessages = linkedContext ?? data?.pages.slice().reverse().flatMap((page) => page) ?? []
   const messages = searchQuery?.trim()
     ? allMessages.filter((m) => m.body?.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : allMessages
@@ -44,6 +48,24 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
     bottomRef.current?.scrollIntoView()
   }, [channelId])
 
+  useEffect(() => {
+    if (!highlightMessageId) {
+      if (focusedMessageRef.current) {
+        focusedMessageRef.current = null
+        isAtBottomRef.current = true
+        bottomRef.current?.scrollIntoView()
+      }
+      return
+    }
+    if (focusedMessageRef.current === highlightMessageId) return
+    const element = Array.from(containerRef.current?.querySelectorAll<HTMLElement>('[data-message-id]') ?? []).find((item) => item.dataset.messageId === highlightMessageId)
+    if (!element) return
+    isAtBottomRef.current = false
+    focusedMessageRef.current = highlightMessageId
+    element.scrollIntoView({ block: 'center' })
+    element.focus({ preventScroll: true })
+  }, [highlightMessageId, messages.length, isLoading])
+
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
@@ -51,7 +73,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
     isAtBottomRef.current = distFromBottom < 100
     setShowJump(distFromBottom > 400)
 
-    if (el.scrollTop < 100 && hasNextPage && !isFetchingNextPage) {
+    if (!linkedContext && el.scrollTop < 100 && hasNextPage && !isFetchingNextPage) {
       const prevHeight = el.scrollHeight
       const prevScrollTop = el.scrollTop
       fetchNextPage().then(() => {
@@ -60,9 +82,9 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
         })
       })
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, linkedContext])
 
-  if (isLoading) {
+  if (isLoading && !linkedContext) {
     return (
       <div className="flex-1 overflow-y-auto">
         {Array.from({ length: 6 }).map((_, i) => <MessageSkeleton key={i} />)}
@@ -71,7 +93,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
   }
 
   // Show the actual error so we can diagnose what's wrong
-  if (isError) {
+  if (isError && !linkedContext) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center max-w-sm px-4">
@@ -120,7 +142,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
         </div>
       )}
 
-      {!hasNextPage && !searchQuery?.trim() && intro}
+      {!linkedContext && !hasNextPage && !searchQuery?.trim() && intro}
 
       {messages.map((message, index) => {
         const prev = messages[index - 1]
@@ -133,7 +155,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
         const showDateDivider = !prev || !sameDay(prev.created_at, message.created_at)
 
         return (
-          <div key={message.id}>
+          <div key={message.id} data-message-id={message.id} tabIndex={-1} className={message.id === highlightMessageId ? 'rounded-lg bg-[#EBF5FF] ring-2 ring-inset ring-[#3589FA] outline-none' : 'outline-none'}>
             {showDateDivider && (
               <div className="my-3 flex items-center gap-3 px-4 sm:px-6">
                 <span className="h-px flex-1 bg-[#E5E7EB]" />
@@ -149,6 +171,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
               currentUserId={currentUserId}
               showHeader={showHeader}
               onThreadOpen={onThreadOpen}
+              onCreateTask={onCreateTask}
             />
           </div>
         )
@@ -156,7 +179,7 @@ export function MessageList({ channelId, currentUserId, onThreadOpen, parentId, 
 
       <div ref={bottomRef} />
     </div>
-    {showJump && (
+    {showJump && !linkedContext && (
       <button
         type="button"
         onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}

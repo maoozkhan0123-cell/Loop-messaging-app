@@ -16,7 +16,9 @@ import { useMarkRead } from '@/hooks/useChannels'
 import { useChannelFiles } from '@/hooks/useChannelFiles'
 import { cn, formatFileSize, isImageMime } from '@/lib/utils'
 import { format } from 'date-fns'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useMessageLink } from '@/hooks/useMessageLink'
+import { CreateMessageTaskDialog } from '@/components/tasks/CreateMessageTaskDialog'
 import { useNotifications } from '@/hooks/useNotifications'
 import { Avatar } from '@/components/ui/Avatar'
 import { AddChannelMembersDialog } from './AddChannelMembersDialog'
@@ -41,7 +43,11 @@ function ConversationPane({ channel, currentUserId }: MessagePaneProps) {
   const [chatSearchOpen, setChatSearchOpen] = useState(false)
   const [chatSearchQuery, setChatSearchQuery] = useState('')
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [taskMessage, setTaskMessage] = useState<Message | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const linkedMessageId = searchParams.get('message')
+  const messageLink = useMessageLink(channel.id, linkedMessageId)
   const notifications = useNotifications()
   const [addPeopleOpen, setAddPeopleOpen] = useState(false)
   const { typingUsers } = useTypingIndicator(channel.id)
@@ -54,6 +60,25 @@ function ConversationPane({ channel, currentUserId }: MessagePaneProps) {
   const subtitle = isDM
     ? [other ? PRESENCE_LABEL[other.status] : null, other?.job_title].filter(Boolean).join(' · ')
     : channel.topic || (channel.type === 'private' ? 'Private channel' : 'Public channel')
+
+  useEffect(() => {
+    if (!linkedMessageId || !messageLink.data) {
+      setThreadMessage(null)
+      return
+    }
+    setActiveTab('messages')
+    setChatSearchQuery('')
+    setChatSearchOpen(false)
+    setDetailsOpen(false)
+    setThreadMessage(messageLink.data.target.parent_id ? messageLink.data.root : null)
+  }, [linkedMessageId, messageLink.data])
+
+  const leaveLinkedContext = () => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('message')
+    router.replace(`${isDM ? '/dm' : '/channel'}/${channel.id}${params.size ? `?${params}` : ''}`, { scroll: false })
+    setThreadMessage(null)
+  }
 
   // Mark channel as read when it's opened or switched to
   useEffect(() => {
@@ -172,11 +197,19 @@ function ConversationPane({ channel, currentUserId }: MessagePaneProps) {
 
         {activeTab === 'messages' ? (
           <>
+            {linkedMessageId && <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[#BFDBFE] bg-[#EFF6FF] px-4 py-2 text-xs text-[#1E40AF]">
+              <p role={messageLink.isError ? 'alert' : 'status'} className="min-w-0 flex-1">{messageLink.isError ? (messageLink.error instanceof Error ? messageLink.error.message : 'This message is unavailable or you no longer have access to it.') : messageLink.isLoading ? 'Loading linked message…' : 'Showing messages around the linked message.'}</p>
+              {messageLink.isError && <button type="button" onClick={() => void messageLink.refetch()} className="font-semibold underline">Retry linked message</button>}
+              <button type="button" onClick={leaveLinkedContext} className="font-semibold underline">Back to latest</button>
+            </div>}
             <MessageList
               channelId={channel.id}
               currentUserId={currentUserId}
               // Only pass onThreadOpen for non-DM channels
               onThreadOpen={isDM ? undefined : setThreadMessage}
+              onCreateTask={setTaskMessage}
+              linkedContext={messageLink.data?.rootContext}
+              highlightMessageId={messageLink.data?.root.id}
               searchQuery={chatSearchQuery}
               intro={intro}
             />
@@ -206,7 +239,7 @@ function ConversationPane({ channel, currentUserId }: MessagePaneProps) {
 
       {/* Thread panel (channels only: side-panel on desktop, full screen overlay on mobile) */}
       <AnimatePresence>
-        {threadMessage && !isDM && (
+        {threadMessage && (
           <motion.div
             initial={{ opacity: 0, x: '100%' }}
             animate={{ opacity: 1, x: 0 }}
@@ -220,10 +253,14 @@ function ConversationPane({ channel, currentUserId }: MessagePaneProps) {
               channelId={channel.id}
               currentUserId={currentUserId}
               onClose={() => setThreadMessage(null)}
+              onCreateTask={setTaskMessage}
+              linkedContext={messageLink.data?.root.id === threadMessage.id ? messageLink.data.replyContext : undefined}
+              highlightMessageId={messageLink.data?.root.id === threadMessage.id ? messageLink.data.target.id : undefined}
             />
           </motion.div>
         )}
       </AnimatePresence>
+      {taskMessage && <CreateMessageTaskDialog key={taskMessage.id} message={taskMessage} conversation={isDM ? channelName : `#${channelName}`} isDM={isDM} currentUserId={currentUserId} onClose={() => setTaskMessage(null)} />}
       <AnimatePresence>
         {detailsOpen && (
           <motion.aside initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: '100%' }} transition={{ duration: 0.18 }} className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto flex w-full md:w-[320px] h-full flex-col bg-white border-l border-[#E5E7EB] flex-shrink-0">
